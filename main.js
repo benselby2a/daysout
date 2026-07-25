@@ -79,6 +79,10 @@ const state = {
   view: "list",
   mapFeatures: null,
   selectedPropertyId: null,
+  // Held in memory only — the browser re-asks (or reuses its own permission
+  // grant) each session rather than us persisting anyone's whereabouts.
+  userLocation: null,
+  locationPending: false,
 };
 
 const el = {
@@ -153,7 +157,7 @@ function readFilterPrefs() {
       search: typeof saved.search === "string" ? saved.search : "",
       visited: ["all", "visited", "unvisited"].includes(saved.visited) ? saved.visited : "all",
       country: typeof saved.country === "string" ? saved.country : "all",
-      sort: ["name", "location", "recent"].includes(saved.sort) ? saved.sort : "name",
+      sort: ["name", "location", "recent", "distance"].includes(saved.sort) ? saved.sort : "name",
       institutions: Array.isArray(saved.institutions) ? saved.institutions : [],
     });
   } catch (_) {
@@ -184,6 +188,113 @@ function writeViewPref(view) {
   } catch (_) {
     // Ignore localStorage access issues.
   }
+}
+
+/* ── Location and distance ─────────── */
+
+const EARTH_RADIUS_KM = 6371;
+const KM_PER_MILE = 1.609344;
+
+function haversineKm(from, to) {
+  const dLat = (to.latitude - from.latitude) * D2R;
+  const dLon = (to.longitude - from.longitude) * D2R;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(from.latitude * D2R) * Math.cos(to.latitude * D2R) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// Straight-line distance, so it under-reads against a road route — fine for
+// ordering a list, which is all it is used for.
+function distanceToProperty(property) {
+  if (!state.userLocation) return null;
+  if (typeof property.latitude !== "number" || typeof property.longitude !== "number") return null;
+  return haversineKm(state.userLocation, property);
+}
+
+function formatDistance(km) {
+  const miles = km / KM_PER_MILE;
+  if (miles < 10) return `${miles.toFixed(1)} mi`;
+  return `${Math.round(miles)} mi`;
+}
+
+function getCurrentPosition(options) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("This browser cannot report your location."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+  });
+}
+
+async function requestLocation({ silent = false, force = false } = {}) {
+  if (state.locationPending) return state.userLocation;
+  state.locationPending = true;
+  renderLocationBar();
+  try {
+    const position = await getCurrentPosition({
+      enableHighAccuracy: false,
+      timeout: 15000,
+      // An explicit refresh must not be answered from the browser's cache.
+      maximumAge: force ? 0 : 300000,
+    });
+    state.userLocation = {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      at: Date.now(),
+    };
+    return state.userLocation;
+  } catch (err) {
+    if (!silent) {
+      const message =
+        err?.code === 1
+          ? "Location permission was denied, so places cannot be sorted by distance."
+          : err?.code === 3
+            ? "Timed out while getting your location. Try again."
+            : `Could not get your location: ${err?.message || "Unknown error"}`;
+      showToast(message, true);
+    }
+    return null;
+  } finally {
+    state.locationPending = false;
+    renderLocationBar();
+  }
+}
+
+function renderLocationBar() {
+  const bar = document.getElementById("location-bar");
+  const status = document.getElementById("location-status");
+  const refresh = document.getElementById("refresh-location");
+  if (!bar || !status) return;
+
+  const relevant = state.filters.sort === "distance" || !!state.userLocation || state.locationPending;
+  bar.classList.toggle("hidden", !relevant);
+  if (!relevant) return;
+
+  if (state.locationPending) {
+    status.textContent = "Getting your location…";
+  } else if (state.userLocation) {
+    const time = new Date(state.userLocation.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    status.textContent = `Distances are straight-line from your location, found at ${time}.`;
+  } else {
+    status.textContent = "Your location is not available.";
+  }
+  if (refresh) refresh.disabled = state.locationPending;
+}
+
+// Restoring a saved "nearest to me" sort must not fire a permission prompt out
+// of nowhere on load, so only re-request when permission was already granted.
+async function maybeAutoRequestLocation() {
+  if (state.filters.sort !== "distance" || state.userLocation) return;
+  try {
+    const permission = await navigator.permissions?.query({ name: "geolocation" });
+    if (permission?.state !== "granted") return;
+  } catch (_) {
+    return;
+  }
+  await requestLocation({ silent: true });
+  applyFilterChange();
 }
 
 /* ── Data ──────────────────────────── */
@@ -282,6 +393,17 @@ function filteredProperties() {
       const bVisited = isVisited(b);
       if (aVisited !== bVisited) return aVisited ? -1 : 1;
     }
+    if (sort === "distance") {
+      const aDistance = distanceToProperty(a);
+      const bDistance = distanceToProperty(b);
+      // Places with no coordinates (or no fix yet) fall to the bottom rather
+      // than pretending to be at zero distance.
+      if (aDistance !== bDistance) {
+        if (aDistance === null) return 1;
+        if (bDistance === null) return -1;
+        return aDistance - bDistance;
+      }
+    }
     return collator.compare(a.name, b.name);
   });
 
@@ -374,6 +496,12 @@ function institutionTags(property) {
     .join("");
 }
 
+function distanceTag(property) {
+  const km = distanceToProperty(property);
+  if (km === null) return "";
+  return `<span class="tag tag-distance">${escapeHtml(formatDistance(km))}</span>`;
+}
+
 function visitedTag(property) {
   const visits = visitsFor(property.id);
   if (!visits.length) return `<span class="tag tag-unvisited">Not visited</span>`;
@@ -411,6 +539,7 @@ function renderPropertyList() {
           </div>
           <div class="property-meta">
             ${visitedTag(p)}
+            ${distanceTag(p)}
             ${institutionTags(p)}
             ${p.website ? `<a class="property-website" href="${escapeHtml(p.website)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
           </div>
@@ -429,6 +558,7 @@ function render() {
   renderHeroSummary();
   renderProgressCards();
   renderInstitutionChips();
+  renderLocationBar();
   renderPropertyList();
   if (state.view === "map") renderMap();
 }
@@ -611,7 +741,7 @@ function renderMapSelection() {
   box.innerHTML = `
     <div class="property-title"><span class="property-name">${escapeHtml(property.name)}</span></div>
     ${location ? `<div class="property-location">${escapeHtml(location)}</div>` : ""}
-    <div class="property-meta">${visitedTag(property)}${institutionTags(property)}</div>
+    <div class="property-meta">${visitedTag(property)}${distanceTag(property)}${institutionTags(property)}</div>
     ${property.website ? `<a class="property-website" href="${escapeHtml(property.website)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
     <div class="property-actions">
       <button type="button" data-action="visit" data-property-id="${property.id}">${isVisited(property) ? "Visits" : "Mark visited"}</button>
@@ -956,25 +1086,53 @@ async function deleteVisit(visitId) {
 
 /* ── Events ────────────────────────── */
 
+function applyFilterChange() {
+  renderLocationBar();
+  renderPropertyList();
+  if (state.view === "map") renderMap();
+}
+
 el.filterSearch?.addEventListener("input", (e) => {
   state.filters.search = e.target.value;
   writeFilterPrefs();
-  renderPropertyList();
-  if (state.view === "map") renderMap();
+  applyFilterChange();
 });
 
 for (const [node, key] of [
   [el.filterVisited, "visited"],
   [el.filterCountry, "country"],
-  [el.filterSort, "sort"],
 ]) {
   node?.addEventListener("change", (e) => {
     state.filters[key] = e.target.value;
     writeFilterPrefs();
-    renderPropertyList();
-    if (state.view === "map") renderMap();
+    applyFilterChange();
   });
 }
+
+el.filterSort?.addEventListener("change", async (e) => {
+  state.filters.sort = e.target.value;
+  writeFilterPrefs();
+
+  if (state.filters.sort === "distance" && !state.userLocation) {
+    applyFilterChange();
+    const position = await requestLocation();
+    if (!position) {
+      // Without a fix, "nearest to me" would just be alphabetical order wearing
+      // a misleading label, so drop back to the default sort.
+      state.filters.sort = "name";
+      el.filterSort.value = "name";
+      writeFilterPrefs();
+    }
+  }
+
+  applyFilterChange();
+});
+
+document.getElementById("refresh-location")?.addEventListener("click", async () => {
+  const position = await requestLocation({ force: true });
+  if (position) showToast("Location updated.");
+  applyFilterChange();
+});
 
 el.institutionChips?.addEventListener("click", (e) => {
   const chip = e.target.closest("[data-institution]");
@@ -1103,6 +1261,7 @@ function applyFiltersToInputs() {
       await loadData();
       render();
       toggleView(readViewPref());
+      maybeAutoRequestLocation();
     } catch (err) {
       console.error("[Days Out] loadAppData error:", err);
     } finally {

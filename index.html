@@ -99,6 +99,7 @@
               <option value="name">Name (A–Z)</option>
               <option value="location">Location</option>
               <option value="recent">Most recently visited</option>
+              <option value="distance">Nearest to me</option>
             </select>
           </label>
         </div>
@@ -106,6 +107,11 @@
         <div class="institution-filter">
           <span class="filter-label">Institution</span>
           <div id="institution-chips" class="chip-row" role="group" aria-label="Filter by institution"></div>
+        </div>
+
+        <div id="location-bar" class="location-bar hidden">
+          <span id="location-status" aria-live="polite"></span>
+          <button type="button" id="refresh-location" class="ghost">Update location</button>
         </div>
 
         <p id="result-count" class="result-count" aria-live="polite"></p>

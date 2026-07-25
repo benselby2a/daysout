@@ -6,6 +6,7 @@ Cadw, RHS gardens and independent houses.
 
 - **List view** with filters for visited / not visited, institution, country and
   a free-text search, plus per-institution progress
+- **Sort by distance** from where you are, using the browser's location
 - **Map view** — a polygon map of the UK with every property plotted by
   coordinates, coloured by whether you have been
 - **Mark a place as visited**, with an optional date and notes. A place can be
@@ -70,6 +71,13 @@ your data.
   property, so repeat visits and undated visits both work. Deleting a property
   deletes its visits.
 - Filters and the chosen view are remembered in browser local storage.
+- **Nearest to me** asks the browser for your location the first time you choose
+  it, and falls back to sorting by name if you decline. Distances are
+  straight-line (so they under-read against a road route) and shown in miles.
+  Your position is held in memory for the session only — it is never written to
+  local storage or sent to Supabase. Reloading the page with that sort saved
+  will not re-prompt unless you already granted permission. Geolocation needs
+  HTTPS, which GitHub Pages provides.
 - `data/uk.json` holds the England / Scotland / Wales / Northern Ireland
   outlines, extracted from the Natural Earth 1:10m `admin_0_map_subunits`
   dataset (public domain), simplified and trimmed of very small islands. It is
