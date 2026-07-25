@@ -117,39 +117,61 @@ capture can interfere. This one is easy to reintroduce — if marker clicks ever
 stop selecting, check here first before assuming the DOM markup broke.
 
 Markers that overlap on screen are merged into one bigger numbered icon rather
-than left to stack invisibly or picked arbitrarily on tap. `drawMapMarkers()`
-recomputes this from scratch on every render **and** on every zoom step (via
-`applyView()`), converting `MAP_CLUSTER_MERGE_PX` (24 screen px) into current
-viewBox units and grouping points with `clusterPoints()` (greedy
-single-linkage). Each marker/cluster carries `data-property-ids` — always a
-comma-separated list, even for a single property — instead of a singular id,
-so pointer handlers use `.closest(".map-marker, .map-marker-cluster")` and
-split that attribute rather than reading a per-element id. Zooming in enough
-that two markers no longer overlap makes them un-cluster on the very next
+than left to stack invisibly, overlap, or get picked arbitrarily on tap.
+`drawMapMarkers()` recomputes this from scratch on every render **and** every
+zoom step (via `applyView()`) using `clusterPointsNoOverlap()`, which runs in
+two phases rather than a single fixed-radius pass:
+
+1. `clusterPoints()` (generic greedy single-linkage) groups raw points using
+   `individualMarkerRadius() * 2` — the distance at which two *lone* markers
+   would touch.
+2. Repeated passes then merge any two resulting groups whose actually-drawn
+   circles would still collide, using each group's real current size via
+   `drawnRadiusForGroupSize()` (a cluster icon is `MAP_CLUSTER_RADIUS_SCALE`
+   — 1.6× — bigger than a lone marker), until a pass makes no further merges
+   (capped at 10 passes).
+
+Phase 2 exists because a single blanket threshold sized for the *worst case*
+(two full cluster icons touching) was tried first and cascaded into one
+80+-member cluster in densely-packed regions (South-East England) once the
+radius crossed a percolation threshold — single-linkage chaining through a
+dense point cloud with too generous a radius doesn't stay local. Escalating
+the merge distance only for the *specific pairs* that would actually overlap,
+rather than assuming from the start that everything might end up
+cluster-sized, avoids that. All radii live in the same map/SVG-unit space as
+point coordinates (`individualMarkerRadius() = MAP_MARKER_RADIUS /
+currentMapZoom`), so distance-vs-radius comparisons need no separate
+screen-pixel conversion and stay correct regardless of zoom or the map's
+on-screen size.
+
+Each marker/cluster carries `data-property-ids` — always a comma-separated
+list, even for a single property — instead of a singular id, so pointer
+handlers use `.closest(".map-marker, .map-marker-cluster")` and split that
+attribute rather than reading a per-element id. Zooming in enough that two
+markers no longer overlap makes them un-cluster on the very next
 `drawMapMarkers()` call, since membership is recomputed from actual on-screen
 distance, not cached. `selectMarkerByIds()` just applies the tapped element's
 id list to `state.selectedPropertyIds` — no separate proximity search is
 needed at tap time, since the cluster grouping already did that work when the
 marker was drawn. Tapping a merged cluster (more than one id) also calls
 `zoomToSeparate()`, which zooms in step-by-step on the group's centre until
-`clusterPoints()` would no longer merge every original member into one
-cluster — so tapping the icon actually reveals the individual markers it
+`clusterPointsNoOverlap()` would no longer merge every original member into
+one cluster — so tapping the icon actually reveals the individual markers it
 replaced, rather than leaving the same icon on screen — it keeps zooming
-until *every* original member is its own singleton cluster, not just until
-the group splits into smaller sub-clusters (a 3+ member cluster resolving to
-"1 + 2" instead of three individual markers was the bug this closed).
-`clampView()`'s zoom-in floor is `baseView.w / 5000` (street-level) rather
-than the old `/12` (city-region level at best) specifically so this can
-actually reach real-world properties a few hundred metres apart — the old
-floor meant genuinely distinct places (e.g. Alnwick Castle and The Alnwick
-Garden, ~270m apart) could never separate no matter how far `zoomToSeparate`
-tried. It still stops early if a zoom step doesn't change `view.w` (that
-floor reached), so pointer-coincident data doesn't spin the loop forever —
-and since it only checks the tapped group against itself, a member can still
-end up newly clustered with some other, previously distant property that
-zooming toward the group's centre brought close by on screen; that's an
-accepted side effect of clustering being recomputed from *all*
-currently-plotted properties, not a bug. The selection card becomes a small carousel
+until *every* original member is its own singleton, not just until the group
+splits into smaller sub-clusters (a 3+ member cluster resolving to "1 + 2"
+instead of three individual markers was a bug this closed). `clampView()`'s
+zoom-in floor is `baseView.w / 5000` (street-level) rather than a much
+shallower earlier value specifically so this can actually reach real-world
+properties a few hundred metres apart (e.g. Alnwick Castle and The Alnwick
+Garden, ~270m apart, couldn't separate at all under the old floor). It still
+stops early if a zoom step doesn't change `view.w` (that floor reached), so
+pointer-coincident data doesn't spin the loop forever — and since it only
+checks the tapped group against itself, a member can still end up newly
+clustered with some other, previously distant property that zooming toward
+the group's centre brought close by on screen; that's an accepted side
+effect of clustering being recomputed from *all* currently-plotted
+properties, not a bug. The selection card becomes a small carousel
 (`data-cluster-nav="prev"/"next"`, `state.selectedCardIndex`) whenever that
 list has more than one entry. The card also has a
 `data-action="close-map-selection"` × in the corner, handled by the same
@@ -158,18 +180,26 @@ handler clears both `.map-marker.active` and `.map-marker-cluster.active`.
 
 Marker fill colour is set inline per-element (`markerFillColor()`), not
 through a CSS class, since it depends on the specific property's institution:
-visited renders in that institution's full colour (`institutionColour()`,
-resolved from the same `--inst-*` CSS custom properties as the filter chips),
-unvisited renders as `color-mix(in srgb, <colour> 38%, var(--map-sea))` — a
-lighter tint of the *same* hue rather than a generic grey, so colour alone
-still identifies the institution either way (verified working as both a
-`fill` attribute and inline style on SVG elements, including with a `var()`
-operand, in Chromium). A mixed-institution cluster falls back to `--muted`
-rather than picking one member's colour arbitrarily; a cluster only renders as
-"visited" shade once *every* member has been visited, not just one. Because
-colour is now set inline, the old `.map-marker.visited`/`.unvisited` CSS rules
-were removed entirely — reintroducing class-based fill rules would silently
-override the inline colour via CSS cascade.
+visited renders in that institution's full colour, unvisited renders as
+`color-mix(in srgb, <colour> 38%, var(--map-sea))` — a lighter tint of the
+*same* hue rather than a generic grey, so colour alone still identifies the
+institution either way (verified working as both a `fill` attribute and
+inline style on SVG elements, including with a `var()` operand, in Chromium).
+The map specifically uses `institutionGroupColour()`, not the `institutionColour()`
+the list view's tags use — it resolves an exact institution (e.g. "National
+Trust for Scotland") to its *group's* colour (National Trust's green) via
+`GROUP_VARNAME_BY_MEMBER`, the same 4 buckets `INSTITUTION_GROUPS` gives the
+progress cards, rather than each of the 7+ exact institutions getting its own
+near-similar hue — a map is read at a glance, and that many close shades
+would be harder to tell apart than the 4 group colours already used
+elsewhere. `institutionTags()` in the list view deliberately keeps using the
+exact per-institution colour instead, since it's showing the precise
+association, not a filter bucket. A mixed-group cluster falls back to
+`--muted` rather than picking one member's colour arbitrarily; a cluster only
+renders as "visited" shade once *every* member has been visited, not just
+one. Because colour is set inline, the old `.map-marker.visited`/`.unvisited`
+CSS rules were removed entirely — reintroducing class-based fill rules would
+silently override the inline colour via CSS cascade.
 
 Markers have no `<title>` child and rely only on `aria-label` plus the custom
 `.uk-map-tooltip` — that tooltip is built from a `pointermove` handler
@@ -224,14 +254,20 @@ the map (marker count should match the filtered rows, the default zoom framing
 shouldn't be confused with a full-UK view when selecting a marker by id,
 clusters should show the right count and fully un-merge into individual
 markers on zoom-in or on tapping the cluster — not partially, e.g. a 3+
-member cluster resolving to "1 + 2" —, hovering a marker/cluster should show
-only the custom tooltip and never a native one, marker colour should track
-the property's institution with unvisited noticeably lighter than visited,
-the location marker should be a house icon at London with no geolocation
-permission and a "you are here" dot once granted, and marker/cluster borders
-should stay visually thin even zoomed in deep), mark-visited, add/edit
-property, the duplicate-name and half-coordinate validations, and both light
-and dark themes. To test the location marker, geolocation must be set on the
-Playwright **browser context** (`browser.newContext({ geolocation: {...},
-permissions: ["geolocation"] })`), not the page — and Chromium only honours
+member cluster resolving to "1 + 2" —, no two rendered markers/clusters
+should ever overlap regardless of zoom level (checking every pairwise
+`cx`/`cy`/`r` on the rendered `<circle>`s is a good way to confirm this
+directly rather than eyeballing a screenshot), hovering a marker/cluster
+should show only the custom tooltip and never a native one, marker colour
+should track the property's institution *group* (not each exact
+institution's own colour — a National Trust for Scotland property should
+render in National Trust's green) with unvisited noticeably lighter than
+visited, the location marker should be a house icon at London with no
+geolocation permission and a "you are here" dot once granted, and
+marker/cluster borders should stay visually thin even zoomed in deep),
+mark-visited, add/edit property, the duplicate-name and half-coordinate
+validations, and both light and dark themes. To test the location marker,
+geolocation must be set on the Playwright **browser context**
+(`browser.newContext({ geolocation: {...}, permissions: ["geolocation"] })`),
+not the page — and Chromium only honours
 it when both options are set together.

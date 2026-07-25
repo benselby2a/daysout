@@ -10,18 +10,19 @@ Cadw, RHS gardens and independent houses.
   the institution filter — click one to narrow the list to it, click again
   (or click "All places") to clear
 - **Map view** — a polygon map of the UK with every property plotted by
-  coordinates, coloured by institution (visited in that institution's colour,
-  not visited in a lighter tint of the same colour). Opens immediately (it
-  never waits on a location fix) zoomed to the 50 miles around your location if
-  already known, or London otherwise, with pinch, double-tap/double-click,
-  scroll, and on-screen +/− controls to zoom, and drag to pan. Markers close
-  enough together to visually overlap merge into one bigger numbered icon;
-  zooming in until they're no longer touching splits them back into individual
-  markers. Tapping either opens a selection card — a small carousel when more
-  than one property is involved — with a × to close it. Tapping a merged icon
-  also zooms in until it splits back into its individual markers. A pulsing
-  dot marks your current location once known, or a house icon at London
-  stands in for it until then
+  coordinates, coloured by institution group (visited in that group's colour,
+  not visited in a lighter tint of the same colour — the same 4 groups as the
+  progress cards, e.g. a National Trust for Scotland place shows National
+  Trust's green). Opens immediately (it never waits on a location fix) zoomed
+  to the 50 miles around your location if already known, or London otherwise,
+  with pinch, double-tap/double-click, scroll, and on-screen +/− controls to
+  zoom, and drag to pan. Markers never overlap — any close enough to touch
+  merge into one bigger numbered icon, and zooming in (or tapping the icon)
+  splits them back into individual markers once there's room to show them
+  separately. Tapping either opens a selection card — a small carousel when
+  more than one property is involved — with a × to close it. A pulsing dot
+  marks your current location once known, or a house icon at London stands in
+  for it until then
 - **Mark a place as visited or not**, a single toggle — no dates, notes, or
   visit history to manage
 - **Add your own properties**, capturing name, location, institution(s),

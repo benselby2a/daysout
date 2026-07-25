@@ -101,6 +101,19 @@ function institutionColour(name) {
   return cssColour(INSTITUTION_BY_NAME.get(name)?.varName || "--muted");
 }
 
+const GROUP_VARNAME_BY_MEMBER = new Map(INSTITUTION_GROUPS.flatMap((g) => g.members.map((name) => [name, g.varName])));
+
+// Map markers use the same colour buckets as the "Visited Properties" filter
+// cards (e.g. National Trust for Scotland renders as National Trust's green)
+// rather than each exact institution's own hue — institutionColour() above —
+// since the map would otherwise need 7+ similar shades to tell apart instead
+// of the 4 group colours the rest of the UI already uses. A hand-typed
+// institution outside the built-in groups falls back to --muted, matching
+// the ad hoc one-member group institutionGroups() creates for it.
+function institutionGroupColour(name) {
+  return cssColour(GROUP_VARNAME_BY_MEMBER.get(name) || "--muted");
+}
+
 // The built-in groups, plus a one-member group for any institution typed in by
 // hand so it still gets its own filter chip and progress card.
 function institutionGroups() {
@@ -685,11 +698,22 @@ function mappableProperties(rows) {
   return rows.filter((p) => typeof p.latitude === "number" && typeof p.longitude === "number");
 }
 
-// Two markers within this many screen pixels of each other merge into one
-// cluster icon, regardless of the current zoom level — converted to the
-// current viewBox's units in drawMapMarkers() since "close" has to mean
-// close on screen, not a fixed map distance.
-const MAP_CLUSTER_MERGE_PX = 24;
+// A cluster icon is drawn this much bigger than an individual marker (see
+// MAP_CLUSTER_RADIUS_SCALE below in drawMapMarkers()).
+const MAP_CLUSTER_RADIUS_SCALE = 1.6;
+
+function individualMarkerRadius() {
+  return MAP_MARKER_RADIUS / currentMapZoom;
+}
+
+// A group's on-screen radius once it's actually drawn — bigger for a
+// cluster icon (2+ members) than a lone marker. Both live in the same
+// map/SVG-unit space as point coordinates, so distance-vs-radius
+// comparisons need no separate screen-pixel conversion; it stays exactly
+// right regardless of zoom or the map's on-screen size.
+function drawnRadiusForGroupSize(size) {
+  return size > 1 ? individualMarkerRadius() * MAP_CLUSTER_RADIUS_SCALE : individualMarkerRadius();
+}
 
 // Greedy single-linkage grouping: starts a cluster from any ungrouped point,
 // then keeps absorbing remaining points within radius of *anything* already
@@ -721,6 +745,47 @@ function clusterPoints(points, radiusSvgUnits) {
   return clusters;
 }
 
+function groupCentroid(members) {
+  return {
+    x: members.reduce((sum, m) => sum + m.x, 0) / members.length,
+    y: members.reduce((sum, m) => sum + m.y, 0) / members.length,
+  };
+}
+
+// Groups points so no two resulting markers ever visually overlap. A first
+// pass clusters on individual-marker size (guarantees no two lone markers
+// overlap); a cluster icon is drawn bigger than that, though, so a second
+// pass repeatedly merges any two groups whose *drawn* circles would still
+// collide — using each group's actual current size, not assuming every
+// point might end up cluster-sized from the start. That blanket assumption
+// (an earlier version) cascades into one enormous cluster in densely-packed
+// regions once the merge radius crosses a percolation threshold: escalating
+// only where a specific pair of groups actually collides avoids that.
+function clusterPointsNoOverlap(points) {
+  let groups = clusterPoints(points, individualMarkerRadius() * 2).map((members) => ({ members, ...groupCentroid(members) }));
+
+  for (let pass = 0; pass < 10; pass++) {
+    let mergedAny = false;
+    outer: for (let i = 0; i < groups.length; i++) {
+      for (let j = i + 1; j < groups.length; j++) {
+        const a = groups[i];
+        const b = groups[j];
+        const limit = drawnRadiusForGroupSize(a.members.length) + drawnRadiusForGroupSize(b.members.length);
+        if (Math.hypot(a.x - b.x, a.y - b.y) <= limit) {
+          const members = a.members.concat(b.members);
+          groups.splice(j, 1);
+          groups.splice(i, 1, { members, ...groupCentroid(members) });
+          mergedAny = true;
+          break outer;
+        }
+      }
+    }
+    if (!mergedAny) break;
+  }
+
+  return groups.map((g) => g.members);
+}
+
 // Visited = the institution's own colour; not visited = a lighter tint of
 // that same hue (blended toward the map's background) rather than a
 // generic grey, so colour alone still identifies the institution either way.
@@ -740,16 +805,11 @@ function drawMapMarkers(svg) {
   const rows = filteredProperties();
   const plotted = mappableProperties(rows);
 
-  const rect = svg.getBoundingClientRect();
-  const currentViewWidth = mapTransform.width / currentMapZoom;
-  const pxPerSvgUnit = rect.width > 0 ? rect.width / currentViewWidth : 0;
-  const radiusSvgUnits = pxPerSvgUnit > 0 ? MAP_CLUSTER_MERGE_PX / pxPerSvgUnit : 0;
-
   const points = plotted.map((p) => {
     const [x, y] = projectToMap(p.longitude, p.latitude);
     return { property: p, x, y };
   });
-  const clusters = clusterPoints(points, radiusSvgUnits);
+  const clusters = clusterPointsNoOverlap(points);
   const selectedId = state.selectedPropertyIds[state.selectedCardIndex];
 
   markersGroup.innerHTML = clusters
@@ -757,8 +817,8 @@ function drawMapMarkers(svg) {
       if (cluster.length === 1) {
         const { property: p, x, y } = cluster[0];
         const active = selectedId === p.id;
-        const r = MAP_MARKER_RADIUS / currentMapZoom;
-        const fill = markerFillColor(institutionColour(p.institutions[0]), isVisited(p));
+        const r = individualMarkerRadius();
+        const fill = markerFillColor(institutionGroupColour(p.institutions[0]), isVisited(p));
         return `<circle class="map-marker${active ? " active" : ""}"
           cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="${fill}"
           data-property-ids="${p.id}" aria-label="${escapeHtml(p.name)}"></circle>`;
@@ -768,11 +828,12 @@ function drawMapMarkers(svg) {
       const cy = cluster.reduce((sum, m) => sum + m.y, 0) / cluster.length;
       const ids = cluster.map((m) => m.property.id);
       const active = ids.includes(selectedId);
-      const r = (MAP_MARKER_RADIUS * 1.6) / currentMapZoom;
+      const r = drawnRadiusForGroupSize(cluster.length);
       const fontSize = (MAP_MARKER_RADIUS * 1.15) / currentMapZoom;
-      // A cluster all of one institution keeps that colour; a mixed cluster
-      // falls back to a neutral tone rather than picking one arbitrarily.
-      const bases = new Set(cluster.map((m) => institutionColour(m.property.institutions[0])));
+      // A cluster all of one institution group keeps that colour; a mixed
+      // cluster falls back to a neutral tone rather than picking one
+      // arbitrarily.
+      const bases = new Set(cluster.map((m) => institutionGroupColour(m.property.institutions[0])));
       const baseColor = bases.size === 1 ? [...bases][0] : cssColour("--muted");
       const allVisited = cluster.every((m) => isVisited(m.property));
       const fill = markerFillColor(baseColor, allVisited);
@@ -1163,12 +1224,12 @@ function wireMapInteractions(svg) {
   }
 
   // Zooms toward the tapped group's centre, a step at a time, until every
-  // member is its own cluster under the same screen-pixel radius
-  // drawMapMarkers uses — i.e. until the individual markers it replaced are
-  // all actually visible, not just split into smaller sub-clusters. Capped
-  // rather than open-ended, and stops early once a zoom step stops changing
-  // the view (clampView's zoom-in limit reached), since a pair of properties
-  // within a few metres of each other could otherwise never separate.
+  // member is its own cluster under the same merge radius drawMapMarkers
+  // uses — i.e. until the individual markers it replaced are all actually
+  // visible, not just split into smaller sub-clusters. Capped rather than
+  // open-ended, and stops early once a zoom step stops changing the view
+  // (clampView's zoom-in limit reached), since a pair of properties within a
+  // few metres of each other could otherwise never separate.
   function zoomToSeparate(ids) {
     const points = ids
       .map((id) => state.properties.find((p) => p.id === id))
@@ -1182,11 +1243,7 @@ function wireMapInteractions(svg) {
     const cy = points.reduce((sum, m) => sum + m.y, 0) / points.length;
 
     for (let i = 0; i < 20; i++) {
-      const rect = svg.getBoundingClientRect();
-      const pxPerSvgUnit = rect.width > 0 ? rect.width / view.w : 0;
-      if (pxPerSvgUnit <= 0) break;
-      const radiusSvgUnits = MAP_CLUSTER_MERGE_PX / pxPerSvgUnit;
-      if (clusterPoints(points, radiusSvgUnits).length >= points.length) break;
+      if (clusterPointsNoOverlap(points).length >= points.length) break;
       const widthBefore = view.w;
       zoomAt(1.6, cx, cy);
       if (view.w === widthBefore) break;
