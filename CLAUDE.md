@@ -55,11 +55,33 @@ islands. The app projects it with an Albers equal-area conic tuned to the UK
 (`projectAlbers`); the same projection places property markers, so it is the
 single source of truth for map geometry.
 
+The map opens zoomed to `DEFAULT_MAP_RADIUS_MILES` around the user's location,
+falling back to London (`ensureMapDefaultCenter()`). That request is capped at
+`MAP_LOCATION_GRACE_MS` (2.5s) — deliberately much shorter than the 15s used by
+the explicit "Nearest to me" sort — because this one fires passively on opening
+the tab and must never leave the map stuck behind a spinner over an unanswered
+permission prompt. Losing that race doesn't cancel the underlying request, so
+a slow "Allow" click still populates `state.userLocation` for later use. The
+default view is resolved once per page load and only sets the *starting*
+viewBox; the existing reset-zoom control still returns to the full UK extent.
+Pinch-zoom and double-tap-to-zoom are hand-rolled on top of Pointer Events in
+`wireMapInteractions()` (there's no touch-gesture library) — `setPointerCapture`
+is wrapped in try/catch there because a throw from it would otherwise abort the
+rest of that pointerdown handler, silently breaking the tracking setup below it.
+
 ## Verifying changes
 
 There are no unit tests. The app is checked by driving it in Chromium with
 Playwright against a stubbed Supabase client, because the CDN and `supabase.co`
-are both blocked from the sandbox. Worth exercising after UI changes: the list
-filters, the map (marker count should match the filtered rows), mark-visited,
-add/edit property, the duplicate-name and half-coordinate validations, and both
+are both blocked from the sandbox. Playwright's touchscreen API only supports
+single-point taps/swipes, so pinch-zoom and double-tap need synthetic
+`PointerEvent`s with distinct `pointerId`s dispatched directly via
+`element.dispatchEvent()` in a `page.evaluate()` call — two overlapping
+pointerdown/pointermove/pointerup sequences with different `pointerId`s for a
+pinch, two pointerdown+pointerup pairs close together in time for a double-tap.
+Worth exercising after UI changes: the
+list filters, the map (marker count should match the filtered rows, and the
+default zoom framing shouldn't be confused with a full-UK view when clicking a
+marker by id), mark-visited, add/edit property, the duplicate-name and
+half-coordinate validations, and both
 light and dark themes.

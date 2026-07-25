@@ -144,6 +144,7 @@ const state = {
   },
   view: "list",
   mapFeatures: null,
+  mapDefaultCenter: null,
   selectedPropertyId: null,
   // Held in memory only — the browser re-asks (or reuses its own permission
   // grant) each session rather than us persisting anyone's whereabouts.
@@ -621,7 +622,62 @@ function projectAlbers(lon, lat) {
 
 const MAP_WIDTH = 620;
 const MAP_PADDING = 12;
+const MAP_MARKER_RADIUS = 7;
 let mapTransform = null;
+let currentMapZoom = 1;
+
+// Where the map opens by default: a radius around the user's location, or
+// around London if location is unavailable or declined. This only sets the
+// starting view — the full UK is still reachable via the zoom-out control.
+const LONDON = { latitude: 51.5074, longitude: -0.1278 };
+const DEFAULT_MAP_RADIUS_MILES = 50;
+// How long the map waits for a location fix before opening on London instead.
+// Deliberately much shorter than requestLocation's own 15s timeout: this is a
+// passive convenience on opening a tab, not a response to an explicit request,
+// so it must never leave the map stuck behind a spinner over an unanswered
+// permission prompt.
+const MAP_LOCATION_GRACE_MS = 2500;
+
+// Approximates a circle of the given radius as a lat/lon box, good enough for
+// framing a map view (not used for distance sorting, which uses haversineKm).
+function boundingBoxForRadius(center, radiusKm) {
+  const dLat = radiusKm / 111.32;
+  const dLon = radiusKm / (111.32 * Math.cos(center.latitude * D2R));
+  return {
+    north: center.latitude + dLat,
+    south: center.latitude - dLat,
+    east: center.longitude + dLon,
+    west: center.longitude - dLon,
+  };
+}
+
+let mapDefaultCenterPromise = null;
+
+// Resolves once to the point the map should open centred on: the user's
+// location if it's already known or already granted, else London. Never
+// rejects and never asks more than once per page load, so returning to the
+// map tab later doesn't re-prompt.
+function ensureMapDefaultCenter() {
+  if (!mapDefaultCenterPromise) {
+    mapDefaultCenterPromise = (async () => {
+      if (state.userLocation) return { ...state.userLocation, source: "location" };
+      try {
+        const permission = await navigator.permissions?.query({ name: "geolocation" });
+        if (permission?.state === "denied") return { ...LONDON, source: "london" };
+      } catch (_) {
+        // Permissions API unavailable — fall through and just try once.
+      }
+      // requestLocation is not cancelled by losing this race — it keeps running
+      // and still populates state.userLocation in the background, so a slow
+      // permission response still benefits later uses (e.g. "Nearest to me")
+      // even though this particular map-open already fell back to London.
+      const grace = new Promise((resolve) => setTimeout(() => resolve(null), MAP_LOCATION_GRACE_MS));
+      const position = await Promise.race([requestLocation({ silent: true }), grace]);
+      return position ? { ...position, source: "location" } : { ...LONDON, source: "london" };
+    })();
+  }
+  return mapDefaultCenterPromise;
+}
 
 // Fits the projected UK into the SVG viewBox. Albers y increases northwards and
 // SVG y increases downwards, hence the flip on the y axis.
@@ -651,6 +707,27 @@ function projectToMap(lon, lat) {
   ];
 }
 
+// The initial viewBox rectangle for state.mapDefaultCenter, in the same
+// map-pixel space as projectToMap. Null until the default centre is resolved.
+function defaultMapView() {
+  if (!state.mapDefaultCenter) return null;
+  const box = boundingBoxForRadius(state.mapDefaultCenter, DEFAULT_MAP_RADIUS_MILES * KM_PER_MILE);
+  const corners = [
+    projectToMap(box.west, box.north),
+    projectToMap(box.east, box.north),
+    projectToMap(box.west, box.south),
+    projectToMap(box.east, box.south),
+  ];
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of corners) {
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
 async function loadUkMap() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
@@ -670,9 +747,13 @@ async function loadUkMap() {
 let ukMapPromise = null;
 function ensureUkMapLoaded() {
   if (!ukMapPromise) {
-    ukMapPromise = loadUkMap()
-      .then((features) => {
+    // Loaded together so the first render already knows both the outlines and
+    // where to open the view — otherwise the map would flash the full UK
+    // extent before jumping to the local view a moment later.
+    ukMapPromise = Promise.all([loadUkMap(), ensureMapDefaultCenter()])
+      .then(([features, center]) => {
         state.mapFeatures = features;
+        state.mapDefaultCenter = center;
         mapTransform = computeMapTransform(features);
         renderMap();
       })
@@ -733,7 +814,8 @@ function renderMap() {
             <div class="map-legend-row"><span class="map-legend-dot" style="background:var(--map-visited)"></span> Visited</div>
             <div class="map-legend-row"><span class="map-legend-dot" style="background:var(--map-unvisited)"></span> Not visited</div>
           </div>
-          <p class="map-hint">Scroll or use + / − to zoom, drag to pan, and click a marker for details. Markers respect the filters above.</p>
+          <p class="map-hint map-center-note"></p>
+          <p class="map-hint">Pinch, double-tap, or scroll to zoom; drag to pan; tap a marker for details. Markers respect the filters above.</p>
           <div class="map-selected"></div>
           <div class="map-no-coords hidden"></div>
         </div>
@@ -741,6 +823,13 @@ function renderMap() {
 
     svg = el.ukMap.querySelector(".uk-map-svg");
     wireMapInteractions(svg);
+
+    const centerNote = el.ukMap.querySelector(".map-center-note");
+    if (centerNote) {
+      centerNote.textContent = state.mapDefaultCenter?.source === "location"
+        ? `Opened zoomed to the ${DEFAULT_MAP_RADIUS_MILES} miles around your location.`
+        : `Opened zoomed to the ${DEFAULT_MAP_RADIUS_MILES} miles around London — allow location access to centre on you instead.`;
+    }
   }
 
   const markersGroup = svg.querySelector(".map-markers");
@@ -750,7 +839,7 @@ function renderMap() {
       const visited = isVisited(p);
       const active = state.selectedPropertyId === p.id;
       return `<circle class="map-marker ${visited ? "visited" : "unvisited"}${active ? " active" : ""}"
-        cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"
+        cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(MAP_MARKER_RADIUS / currentMapZoom).toFixed(2)}"
         data-property-id="${p.id}"><title>${escapeHtml(p.name)}</title></circle>`;
     })
     .join("");
@@ -790,14 +879,16 @@ function wireMapInteractions(svg) {
   const wrap = el.ukMap.querySelector(".uk-map-svg-wrap");
   const tip = el.ukMap.querySelector(".uk-map-tooltip");
   const baseView = { x: 0, y: 0, w: mapTransform.width, h: mapTransform.height };
-  let view = { ...baseView };
+  let view = defaultMapView() || { ...baseView };
   let dragState = null;
 
   function applyView() {
     svg.setAttribute("viewBox", `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.w.toFixed(2)} ${view.h.toFixed(2)}`);
-    // Keep markers a constant on-screen size as the map zooms.
-    const zoom = baseView.w / view.w;
-    svg.querySelectorAll(".map-marker").forEach((node) => node.setAttribute("r", (4 / zoom).toFixed(2)));
+    // Keep markers a constant on-screen size as the map zooms. currentMapZoom
+    // is also read by renderMap() so markers inserted later (after a filter
+    // change) come in at the right size instead of momentarily full-size.
+    currentMapZoom = baseView.w / view.w;
+    svg.querySelectorAll(".map-marker").forEach((node) => node.setAttribute("r", (MAP_MARKER_RADIUS / currentMapZoom).toFixed(2)));
   }
 
   function clampView() {
@@ -806,6 +897,8 @@ function wireMapInteractions(svg) {
     view.x = Math.min(baseView.w - view.w, Math.max(0, view.x));
     view.y = Math.min(baseView.h - view.h, Math.max(0, view.y));
   }
+  clampView();
+  applyView();
 
   function zoomAt(factor, originX, originY) {
     const newW = view.w / factor;
@@ -820,12 +913,12 @@ function wireMapInteractions(svg) {
     applyView();
   }
 
-  function toSvgPoint(evt) {
+  function toSvgPointXY(clientX, clientY) {
     const rect = svg.getBoundingClientRect();
-    return [
-      view.x + ((evt.clientX - rect.left) / rect.width) * view.w,
-      view.y + ((evt.clientY - rect.top) / rect.height) * view.h,
-    ];
+    return [view.x + ((clientX - rect.left) / rect.width) * view.w, view.y + ((clientY - rect.top) / rect.height) * view.h];
+  }
+  function toSvgPoint(evt) {
+    return toSvgPointXY(evt.clientX, evt.clientY);
   }
 
   svg.addEventListener("wheel", (e) => {
@@ -846,19 +939,72 @@ function wireMapInteractions(svg) {
     });
   });
 
+  // pointerId -> {x, y} in client space, tracking every finger/pointer
+  // currently down so a second finger landing can be recognised as a pinch.
+  const activePointers = new Map();
+  let pinchState = null; // { lastDist } while two pointers are down
+  let tapCandidate = null; // a single-pointer press that might turn into a tap
+  let lastTap = null; // the most recent qualifying single tap, for double-tap
+
+  const TAP_MAX_DURATION_MS = 400;
+  const TAP_MAX_MOVEMENT_PX = 12;
+  const DOUBLE_TAP_MAX_GAP_MS = 350;
+  const DOUBLE_TAP_MAX_DISTANCE_PX = 32;
+  const DOUBLE_TAP_ZOOM_FACTOR = 1.9;
+
+  function pinchMetrics() {
+    const [a, b] = [...activePointers.values()];
+    return { dist: Math.hypot(a.x - b.x, a.y - b.y), midX: (a.x + b.x) / 2, midY: (a.y + b.y) / 2 };
+  }
+
   svg.addEventListener("pointerdown", (e) => {
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    // A capture failure must not abort the rest of this handler — the pinch/tap
+    // tracking set up below still needs to run either way.
+    try {
+      svg.setPointerCapture(e.pointerId);
+    } catch (_) {
+      // Capture isn't available for every pointer (e.g. certain synthetic or
+      // already-released ones); panning/pinching still work without it.
+    }
+
+    if (activePointers.size === 2) {
+      // A second finger landing turns this into a pinch: drop any
+      // single-finger pan/tap tracking so they don't fight over the gesture.
+      dragState = null;
+      tapCandidate = null;
+      pinchState = { lastDist: pinchMetrics().dist };
+      return;
+    }
+    if (activePointers.size > 2) return;
+
     if (e.target.classList.contains("map-marker")) return;
     dragState = { startX: e.clientX, startY: e.clientY, viewX: view.x, viewY: view.y };
-    svg.setPointerCapture(e.pointerId);
+    tapCandidate = { x: e.clientX, y: e.clientY, t: performance.now() };
   });
 
   svg.addEventListener("pointermove", (e) => {
+    if (activePointers.has(e.pointerId)) activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.size >= 2 && pinchState) {
+      const { dist, midX, midY } = pinchMetrics();
+      if (pinchState.lastDist) {
+        const [originX, originY] = toSvgPointXY(midX, midY);
+        zoomAt(dist / pinchState.lastDist, originX, originY);
+      }
+      pinchState.lastDist = dist;
+      return;
+    }
+
     if (dragState) {
       const rect = svg.getBoundingClientRect();
       view.x = dragState.viewX - ((e.clientX - dragState.startX) / rect.width) * view.w;
       view.y = dragState.viewY - ((e.clientY - dragState.startY) / rect.height) * view.h;
       clampView();
       applyView();
+      if (tapCandidate && Math.hypot(e.clientX - tapCandidate.x, e.clientY - tapCandidate.y) > TAP_MAX_MOVEMENT_PX) {
+        tapCandidate = null;
+      }
       return;
     }
     if (!e.target.classList.contains("map-marker")) {
@@ -877,13 +1023,44 @@ function wireMapInteractions(svg) {
     tip.hidden = false;
   });
 
-  function endDrag(e) {
-    if (!dragState) return;
-    dragState = null;
+  function endPointer(e) {
+    const wasTracked = activePointers.has(e.pointerId);
+    activePointers.delete(e.pointerId);
     if (e.pointerId !== undefined && svg.hasPointerCapture?.(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+
+    if (pinchState) {
+      // Ending a pinch always stops the gesture rather than letting the
+      // remaining finger snap into a pan using stale start coordinates; lifting
+      // and pressing again resumes panning cleanly.
+      pinchState = null;
+      dragState = null;
+      tapCandidate = null;
+      return;
+    }
+    if (!wasTracked) return;
+
+    if (tapCandidate && activePointers.size === 0) {
+      const now = performance.now();
+      const moved = Math.hypot(e.clientX - tapCandidate.x, e.clientY - tapCandidate.y);
+      if (now - tapCandidate.t <= TAP_MAX_DURATION_MS && moved <= TAP_MAX_MOVEMENT_PX) {
+        const isDoubleTap =
+          lastTap &&
+          now - lastTap.t <= DOUBLE_TAP_MAX_GAP_MS &&
+          Math.hypot(tapCandidate.x - lastTap.x, tapCandidate.y - lastTap.y) <= DOUBLE_TAP_MAX_DISTANCE_PX;
+        if (isDoubleTap) {
+          const [originX, originY] = toSvgPointXY(tapCandidate.x, tapCandidate.y);
+          zoomAt(DOUBLE_TAP_ZOOM_FACTOR, originX, originY);
+          lastTap = null;
+        } else {
+          lastTap = tapCandidate;
+        }
+      }
+    }
+    dragState = null;
+    tapCandidate = null;
   }
-  svg.addEventListener("pointerup", endDrag);
-  svg.addEventListener("pointercancel", endDrag);
+  svg.addEventListener("pointerup", endPointer);
+  svg.addEventListener("pointercancel", endPointer);
   svg.addEventListener("pointerleave", () => { tip.hidden = true; });
 
   svg.addEventListener("click", (e) => {

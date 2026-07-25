@@ -9,7 +9,10 @@ Cadw, RHS gardens and independent houses.
 - **Sort** alphabetically or by distance from where you are, using the
   browser's location
 - **Map view** — a polygon map of the UK with every property plotted by
-  coordinates, coloured by whether you have been
+  coordinates, coloured by whether you have been. Opens zoomed to the 50 miles
+  around your location (or London if location isn't available), with pinch,
+  double-tap/double-click, scroll, and on-screen +/− controls to zoom, and drag
+  to pan
 - **Mark a place as visited**, with an optional date and notes. A place can be
   visited more than once, and "visited, no idea when" is a valid entry
 - **Add your own properties**, capturing name, location, institution(s),
