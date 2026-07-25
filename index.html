@@ -7,7 +7,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=20260725-2" />
+    <link rel="stylesheet" href="styles.css?v=20260725-4" />
     <script>
       if (window !== window.parent) {
         document.documentElement.setAttribute('data-hub', '');
@@ -161,32 +161,9 @@
       </div>
     </div>
 
-    <div id="visit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="visit-modal-title">
-      <div class="modal-card">
-        <div class="panel-head">
-          <h2 id="visit-modal-title">Mark as Visited</h2>
-          <button id="visit-cancel" type="button">Close</button>
-        </div>
-        <p id="visit-modal-property" class="visit-modal-property"></p>
-        <form id="visit-form" class="grid-form" autocomplete="off" onsubmit="event.preventDefault(); return false;">
-          <input type="hidden" name="propertyId" />
-          <label class="full-width">
-            <span>Date visited <span class="optional">(optional)</span></span>
-            <input type="date" name="visitedOn" />
-          </label>
-          <label class="full-width">
-            <span>Notes <span class="optional">(optional)</span></span>
-            <textarea name="notes" rows="2" placeholder="Who came, what the weather did…"></textarea>
-          </label>
-          <button type="submit">Save Visit</button>
-        </form>
-        <div id="visit-history"></div>
-      </div>
-    </div>
-
     <div id="status-toast" class="status-toast hidden" role="status" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
-    <script src="main.js?v=20260725-2"></script>
+    <script src="main.js?v=20260725-4"></script>
   </body>
 </html>

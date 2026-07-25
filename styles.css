@@ -631,13 +631,13 @@ button.ghost {
    institution the specific property belongs to. */
 .map-marker {
   stroke: var(--card);
-  stroke-width: 1;
+  stroke-width: 0.5;
   cursor: pointer;
   transition: r 120ms ease;
 }
 
-.map-marker:hover { stroke: var(--text); stroke-width: 1.4; }
-.map-marker.active { stroke: var(--text); stroke-width: 1.8; }
+.map-marker:hover { stroke: var(--text); stroke-width: 1; }
+.map-marker.active { stroke: var(--text); stroke-width: 1.4; }
 
 .map-marker-cluster {
   cursor: pointer;
@@ -645,12 +645,12 @@ button.ghost {
 
 .map-marker-cluster circle {
   stroke: var(--card);
-  stroke-width: 1.5;
+  stroke-width: 0.75;
   transition: r 120ms ease;
 }
 
-.map-marker-cluster:hover circle { stroke: var(--text); stroke-width: 2; }
-.map-marker-cluster.active circle { stroke: var(--text); stroke-width: 2.4; }
+.map-marker-cluster:hover circle { stroke: var(--text); stroke-width: 1.4; }
+.map-marker-cluster.active circle { stroke: var(--text); stroke-width: 1.8; }
 
 .map-marker-cluster text {
   fill: #fff;
@@ -730,10 +730,6 @@ button.ghost {
   justify-content: center;
 }
 
-.map-center-note {
-  font-size: 0.76rem;
-  opacity: 0.85;
-}
 
 /* A floating card over the map itself rather than a permanent side column, so
    the map keeps the space when nothing is selected — :empty collapses it
@@ -854,46 +850,6 @@ button.ghost {
   pointer-events: none;
   z-index: 3;
 }
-
-/* ── Visit history ─────────────────── */
-
-.visit-modal-property {
-  margin-top: 6px;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.visit-history-list {
-  margin-top: 14px;
-  display: grid;
-  gap: 6px;
-}
-
-.visit-history-list h3 {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-
-.visit-history-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  font-size: 0.86rem;
-}
-
-.visit-history-row button {
-  min-height: 30px;
-  padding: 4px 10px;
-  font-size: 0.78rem;
-}
-
-.visit-history-note { color: var(--muted); font-size: 0.8rem; }
 
 /* ── Toast ─────────────────────────── */
 

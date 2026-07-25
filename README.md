@@ -18,9 +18,10 @@ Cadw, RHS gardens and independent houses.
   enough together to visually overlap merge into one bigger numbered icon;
   zooming in until they're no longer touching splits them back into individual
   markers. Tapping either opens a selection card — a small carousel when more
-  than one property is involved — with a × to close it
-- **Mark a place as visited**, with an optional date and notes. A place can be
-  visited more than once, and "visited, no idea when" is a valid entry
+  than one property is involved — with a × to close it. Tapping a merged icon
+  also zooms in until it splits back into its individual markers
+- **Mark a place as visited or not**, a single toggle — no dates, notes, or
+  visit history to manage
 - **Add your own properties**, capturing name, location, institution(s),
   coordinates and a website link
 
@@ -90,9 +91,10 @@ your data.
   `INSTITUTION_GROUPS` in `main.js`; no migration is needed.
 - A property needs both a latitude and a longitude to appear on the map. The map
   view says how many filtered places are missing coordinates.
-- Visits are stored as rows in `daysout.visits` rather than a flag on the
-  property, so repeat visits and undated visits both work. Deleting a property
-  deletes its visits.
+- Visits are still stored as rows in `daysout.visits` under the hood (the
+  schema is unchanged), but the UI only ever exposes a visited/not-visited
+  toggle — marking visited inserts one dateless, noteless row, marking
+  not-visited deletes all of them. Deleting a property deletes its visits.
 - Filters and the chosen view are remembered in browser local storage.
 - **Nearest to me** asks the browser for your location the first time you choose
   it, and falls back to sorting by name if you decline. Distances are

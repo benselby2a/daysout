@@ -46,9 +46,15 @@ still running JS from before the feature existed).
 
 ## Data model
 
-Visits are rows in `daysout.visits`, not a boolean on the property, so a place
-can be visited repeatedly and `visited_on` is nullable ("visited, no idea
-when"). Anything deriving visited state should go through `isVisited()`.
+Visits are still stored as rows in `daysout.visits` (schema unchanged
+deliberately), but the UI only ever exposes a single visited/not-visited
+toggle now — no per-visit dates, notes, or history list. `toggleVisited()`
+inserts one dateless, noteless row to mark a property visited, and deletes
+every row for that property to un-mark it, rather than tracking which one to
+remove. The redundancy (a table that can hold multiple dated visits, used
+only as an existence flag) is intentional — not worth a schema migration
+just to drop columns the app no longer surfaces. Anything deriving visited
+state should go through `isVisited()`.
 
 Properties store their **exact** association (`National Trust for Scotland`,
 `Cadw`, …). `INSTITUTION_GROUPS` in `main.js` groups those by membership for
@@ -124,7 +130,20 @@ that two markers no longer overlap makes them un-cluster on the very next
 distance, not cached. `selectMarkerByIds()` just applies the tapped element's
 id list to `state.selectedPropertyIds` — no separate proximity search is
 needed at tap time, since the cluster grouping already did that work when the
-marker was drawn. The selection card becomes a small carousel
+marker was drawn. Tapping a merged cluster (more than one id) also calls
+`zoomToSeparate()`, which zooms in step-by-step on the group's centre until
+`clusterPoints()` would no longer merge every original member into one
+cluster — so tapping the icon actually reveals the individual markers it
+replaced, rather than leaving the same icon on screen. It stops early if a
+zoom step doesn't change `view.w` (the app's own max-zoom clamp in
+`clampView()` was reached first), so two properties only metres apart on the
+ground (e.g. Alnwick Castle and The Alnwick Garden) can legitimately stay
+merged rather than the loop spinning forever chasing a separation the zoom
+level can't reach — and since it only checks the tapped group against itself,
+a member can still end up newly clustered with some other, previously distant
+property that panning/zooming toward the group's centre brought close by on
+screen; that's an accepted side effect of clustering being recomputed from
+*all* currently-plotted properties, not a bug. The selection card becomes a small carousel
 (`data-cluster-nav="prev"/"next"`, `state.selectedCardIndex`) whenever that
 list has more than one entry. The card also has a
 `data-action="close-map-selection"` × in the corner, handled by the same
@@ -149,8 +168,14 @@ override the inline colour via CSS cascade.
 Markers have no `<title>` child and rely only on `aria-label` plus the custom
 `.uk-map-tooltip` — that tooltip is built from a `pointermove` handler
 matching `.closest(".map-marker, .map-marker-cluster")`, showing a name/
-location/visited-status card for a single property or "N properties here" for
-a cluster.
+location line for a single property (no visited status or date — colour
+already carries that) or "N properties here" for a cluster. There's no
+"opened zoomed to the N miles around..." caption under the map either
+(`.map-center-note` was removed) — the map itself already shows where it's
+centred, so a text caption saying so again was redundant. Marker strokes
+(`.map-marker`/`.map-marker-cluster circle`) are deliberately thin
+(0.5–0.75px, thicker only on hover/active) so the border reads as a subtle
+outline rather than competing with the institution-colour fill for attention.
 
 ## Verifying changes
 

@@ -174,10 +174,6 @@ const el = {
   propertySubmit: document.getElementById("property-submit"),
   propertyFormError: document.getElementById("property-form-error"),
   removeProperty: document.getElementById("remove-property"),
-  visitModal: document.getElementById("visit-modal"),
-  visitModalProperty: document.getElementById("visit-modal-property"),
-  visitForm: document.getElementById("visit-form"),
-  visitHistory: document.getElementById("visit-history"),
   statusToast: document.getElementById("status-toast"),
 };
 
@@ -203,16 +199,6 @@ function showToast(message, isError = false) {
 
 function hidePageLoading() {
   document.getElementById("page-loading-overlay")?.classList.add("hidden");
-}
-
-function formatVisitDate(iso) {
-  if (!iso) return "Date not recorded";
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 function readFilterPrefs() {
@@ -350,16 +336,6 @@ function visitsFor(propertyId) {
 
 function isVisited(property) {
   return visitsFor(property.id).length > 0;
-}
-
-// Most recent recorded visit date, or null when a place is only marked as
-// visited with no date. Used for the "most recently visited" sort.
-function lastVisitDate(property) {
-  const dated = visitsFor(property.id)
-    .map((v) => v.visitedOn)
-    .filter(Boolean)
-    .sort();
-  return dated.length ? dated[dated.length - 1] : null;
 }
 
 async function loadData() {
@@ -502,11 +478,9 @@ function distanceTag(property) {
 }
 
 function visitedTag(property) {
-  const visits = visitsFor(property.id);
-  if (!visits.length) return `<span class="tag tag-unvisited">Not visited</span>`;
-  const date = lastVisitDate(property);
-  const suffix = visits.length > 1 ? ` ×${visits.length}` : "";
-  return `<span class="tag tag-visited">Visited${date ? ` ${formatVisitDate(date)}` : ""}${suffix}</span>`;
+  return isVisited(property)
+    ? `<span class="tag tag-visited">Visited</span>`
+    : `<span class="tag tag-unvisited">Not visited</span>`;
 }
 
 function renderPropertyList() {
@@ -545,7 +519,7 @@ function renderPropertyList() {
           ${p.notes ? `<p class="property-note">${escapeHtml(p.notes)}</p>` : ""}
         </div>
         <div class="property-actions">
-          <button type="button" data-action="visit" data-property-id="${p.id}">${visited ? "Visits" : "Mark visited"}</button>
+          <button type="button" data-action="visit" data-property-id="${p.id}">${visited ? "Mark not visited" : "Mark visited"}</button>
           <button type="button" class="ghost" data-action="edit" data-property-id="${p.id}">Edit</button>
         </div>
       </article>`;
@@ -855,19 +829,11 @@ function renderMap() {
         <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-visited"></span> Visited (darker)</span>
         <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-unvisited"></span> Not visited (lighter)</span>
         <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-cluster">3</span> Places close together</span>
-        <span class="map-center-note"></span>
       </div>
       <div class="map-no-coords hidden"></div>`;
 
     svg = el.ukMap.querySelector(".uk-map-svg");
     wireMapInteractions(svg);
-
-    const centerNote = el.ukMap.querySelector(".map-center-note");
-    if (centerNote) {
-      centerNote.textContent = state.mapDefaultCenter?.source === "location"
-        ? `Opened zoomed to the ${DEFAULT_MAP_RADIUS_MILES} miles around your location`
-        : `Opened zoomed to the ${DEFAULT_MAP_RADIUS_MILES} miles around London — allow location access to centre on you instead`;
-    }
   }
 
   const missing = drawMapMarkers(svg);
@@ -912,7 +878,7 @@ function renderMapSelection() {
     <div class="property-meta">${visitedTag(property)}${distanceTag(property)}${institutionTags(property)}</div>
     ${property.website ? `<a class="property-website" href="${escapeHtml(property.website)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
     <div class="property-actions">
-      <button type="button" data-action="visit" data-property-id="${property.id}">${isVisited(property) ? "Visits" : "Mark visited"}</button>
+      <button type="button" data-action="visit" data-property-id="${property.id}">${isVisited(property) ? "Mark not visited" : "Mark visited"}</button>
       <button type="button" class="ghost" data-action="edit" data-property-id="${property.id}">Edit</button>
     </div>`;
 }
@@ -1079,10 +1045,8 @@ function wireMapInteractions(svg) {
       const property = state.properties.find((p) => p.id === ids[0]);
       if (!property) return;
       const location = [property.location, property.country].filter(Boolean).join(", ");
-      const visits = visitsFor(property.id);
-      const sub = visits.length ? `Visited ${formatVisitDate(lastVisitDate(property))}` : "Not visited";
       const locationLine = [location, propertyTypeLabel(property)].filter(Boolean).join(" · ");
-      html = `${escapeHtml(property.name)}<span class="tooltip-sub">${escapeHtml(locationLine)}</span><span class="tooltip-sub">${escapeHtml(sub)}</span>`;
+      html = `${escapeHtml(property.name)}<span class="tooltip-sub">${escapeHtml(locationLine)}</span>`;
     }
     tip.innerHTML = html;
     tip.style.left = `${e.clientX - wrapRect.left}px`;
@@ -1139,12 +1103,47 @@ function wireMapInteractions(svg) {
   // The tapped marker or cluster already carries the exact property id list
   // (computed by drawMapMarkers from actual on-screen overlap), so selection
   // just applies it and redraws to pick up the new "active" highlight —
-  // no separate proximity search needed at tap time.
+  // no separate proximity search needed at tap time. Tapping a merged
+  // cluster also zooms in on it so the icon it replaced becomes individually
+  // visible markers again, rather than leaving the user looking at the same
+  // single icon they just tapped.
   function selectMarkerByIds(ids) {
     state.selectedPropertyIds = ids;
     state.selectedCardIndex = 0;
+    if (ids.length > 1) zoomToSeparate(ids);
     drawMapMarkers(svg);
     renderMapSelection();
+  }
+
+  // Zooms toward the tapped group's centre, a step at a time, until every
+  // member is its own cluster under the same screen-pixel radius
+  // drawMapMarkers uses — i.e. until the individual markers it replaced are
+  // all actually visible, not just split into smaller sub-clusters. Capped
+  // rather than open-ended, and stops early once a zoom step stops changing
+  // the view (clampView's zoom-in limit reached), since a pair of properties
+  // within a few metres of each other could otherwise never separate.
+  function zoomToSeparate(ids) {
+    const points = ids
+      .map((id) => state.properties.find((p) => p.id === id))
+      .filter(Boolean)
+      .map((p) => {
+        const [x, y] = projectToMap(p.longitude, p.latitude);
+        return { x, y };
+      });
+    if (points.length < 2) return;
+    const cx = points.reduce((sum, m) => sum + m.x, 0) / points.length;
+    const cy = points.reduce((sum, m) => sum + m.y, 0) / points.length;
+
+    for (let i = 0; i < 20; i++) {
+      const rect = svg.getBoundingClientRect();
+      const pxPerSvgUnit = rect.width > 0 ? rect.width / view.w : 0;
+      if (pxPerSvgUnit <= 0) break;
+      const radiusSvgUnits = MAP_CLUSTER_MERGE_PX / pxPerSvgUnit;
+      if (clusterPoints(points, radiusSvgUnits).length >= points.length) break;
+      const widthBefore = view.w;
+      zoomAt(1.6, cx, cy);
+      if (view.w === widthBefore) break;
+    }
   }
 }
 
@@ -1284,7 +1283,7 @@ async function removeCurrentProperty() {
   const id = Number(el.propertyForm.elements.propertyId.value);
   const property = state.properties.find((p) => p.id === id);
   if (!property) return;
-  if (!window.confirm(`Remove ${property.name} and any recorded visits?`)) return;
+  if (!window.confirm(`Remove ${property.name}?`)) return;
 
   try {
     const { error } = await db.from("properties").delete().eq("id", id);
@@ -1306,75 +1305,25 @@ async function removeCurrentProperty() {
 
 /* ── Visits ────────────────────────── */
 
-function renderVisitHistory(property) {
-  const visits = visitsFor(property.id);
-  if (!visits.length) {
-    el.visitHistory.innerHTML = "";
-    return;
-  }
-  const sorted = visits.slice().sort((a, b) => (b.visitedOn || "").localeCompare(a.visitedOn || ""));
-  el.visitHistory.innerHTML = `<div class="visit-history-list">
-    <h3>Recorded visits</h3>
-    ${sorted
-      .map(
-        (v) => `<div class="visit-history-row">
-          <div>
-            ${escapeHtml(formatVisitDate(v.visitedOn))}
-            ${v.notes ? `<div class="visit-history-note">${escapeHtml(v.notes)}</div>` : ""}
-          </div>
-          <button type="button" class="ghost" data-action="delete-visit" data-visit-id="${v.id}">Remove</button>
-        </div>`
-      )
-      .join("")}
-  </div>`;
-}
-
-function openVisitModal(property) {
-  el.visitForm.reset();
-  el.visitForm.elements.propertyId.value = property.id;
-  el.visitModalProperty.textContent = [property.location, property.country].filter(Boolean).join(", ")
-    ? `${property.name} — ${[property.location, property.country].filter(Boolean).join(", ")}`
-    : property.name;
-  renderVisitHistory(property);
-  el.visitModal.classList.remove("hidden");
-}
-
-async function submitVisitForm() {
+// The UI only ever exposes a single visited/not-visited toggle, no dates or
+// notes — the underlying daysout.visits table still supports those (it's not
+// worth a schema change just to drop columns the app no longer surfaces), so
+// marking visited inserts one dateless, noteless row, and marking not-visited
+// deletes every row for that property rather than tracking which to remove.
+async function toggleVisited(property) {
   if (!db) return;
-  const propertyId = Number(el.visitForm.elements.propertyId.value);
-  const property = state.properties.find((p) => p.id === propertyId);
-  if (!property) return;
-
-  const visitedOn = el.visitForm.elements.visitedOn.value || null;
-  const notes = String(el.visitForm.elements.notes.value || "").trim() || null;
-
+  const wasVisited = isVisited(property);
   try {
-    const { error } = await db.from("visits").insert({ property_id: propertyId, visited_on: visitedOn, notes });
-    if (error) throw error;
-    el.visitModal.classList.add("hidden");
-    await loadData();
-    render();
-    showToast(`Marked ${property.name} as visited.`);
-  } catch (err) {
-    showToast(`Could not save the visit: ${err?.message || "Unknown error"}`, true);
-    console.error("[Days Out] Save visit error:", err);
-  }
-}
-
-async function deleteVisit(visitId) {
-  if (!db) return;
-  const propertyId = Number(el.visitForm.elements.propertyId.value);
-  try {
-    const { error } = await db.from("visits").delete().eq("id", visitId);
+    const { error } = wasVisited
+      ? await db.from("visits").delete().eq("property_id", property.id)
+      : await db.from("visits").insert({ property_id: property.id, visited_on: null, notes: null });
     if (error) throw error;
     await loadData();
     render();
-    const property = state.properties.find((p) => p.id === propertyId);
-    if (property) renderVisitHistory(property);
-    showToast("Visit removed.");
+    showToast(wasVisited ? `Marked ${property.name} as not visited.` : `Marked ${property.name} as visited.`);
   } catch (err) {
-    showToast(`Could not remove the visit: ${err?.message || "Unknown error"}`, true);
-    console.error("[Days Out] Delete visit error:", err);
+    showToast(`Could not update ${property.name}: ${err?.message || "Unknown error"}`, true);
+    console.error("[Days Out] Toggle visited error:", err);
   }
 }
 
@@ -1461,11 +1410,6 @@ document.addEventListener("click", (e) => {
   if (!button) return;
   const action = button.dataset.action;
 
-  if (action === "delete-visit") {
-    deleteVisit(Number(button.dataset.visitId));
-    return;
-  }
-
   if (action === "close-map-selection") {
     state.selectedPropertyIds = [];
     state.selectedCardIndex = 0;
@@ -1476,7 +1420,7 @@ document.addEventListener("click", (e) => {
 
   const property = state.properties.find((p) => p.id === Number(button.dataset.propertyId));
   if (!property) return;
-  if (action === "visit") openVisitModal(property);
+  if (action === "visit") toggleVisited(property);
   if (action === "edit") openPropertyModal(property);
 });
 
@@ -1495,21 +1439,16 @@ el.mapTab?.addEventListener("click", () => toggleView("map"));
 
 document.getElementById("open-add-property")?.addEventListener("click", () => openPropertyModal(null));
 document.getElementById("property-cancel")?.addEventListener("click", () => el.propertyModal.classList.add("hidden"));
-document.getElementById("visit-cancel")?.addEventListener("click", () => el.visitModal.classList.add("hidden"));
 el.propertyForm?.addEventListener("submit", (e) => { e.preventDefault(); submitPropertyForm(); });
-el.visitForm?.addEventListener("submit", (e) => { e.preventDefault(); submitVisitForm(); });
 el.removeProperty?.addEventListener("click", removeCurrentProperty);
 
-// Click the backdrop or press Escape to dismiss either modal.
-for (const modal of [el.propertyModal, el.visitModal]) {
-  modal?.addEventListener("click", (e) => {
-    if (e.target === modal) modal.classList.add("hidden");
-  });
-}
+// Click the backdrop or press Escape to dismiss the modal.
+el.propertyModal?.addEventListener("click", (e) => {
+  if (e.target === el.propertyModal) el.propertyModal.classList.add("hidden");
+});
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   el.propertyModal?.classList.add("hidden");
-  el.visitModal?.classList.add("hidden");
 });
 
 /* ── Auth and boot ─────────────────── */
