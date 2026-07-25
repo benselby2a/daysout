@@ -153,7 +153,6 @@ const state = {
 };
 
 const el = {
-  heroSummary: document.getElementById("hero-summary"),
   progressCards: document.getElementById("progress-cards"),
   propertyList: document.getElementById("property-list"),
   resultCount: document.getElementById("result-count"),
@@ -464,18 +463,6 @@ function filteredProperties() {
 
 /* ── Rendering ─────────────────────── */
 
-function renderHeroSummary() {
-  if (!el.heroSummary) return;
-  const total = state.properties.length;
-  const visited = state.properties.filter(isVisited).length;
-  if (!total) {
-    el.heroSummary.textContent = "No properties yet — add one to get started.";
-    return;
-  }
-  const pct = Math.round((visited / total) * 100);
-  el.heroSummary.textContent = `${visited} of ${total} places visited (${pct}%) — ${total - visited} still to go.`;
-}
-
 function renderProgressCards() {
   if (!el.progressCards) return;
   const total = state.properties.length;
@@ -520,6 +507,12 @@ function renderInstitutionChips() {
       </button>`;
     })
     .join("");
+}
+
+// Plain-text institution list for contexts (map tooltip) that can't render
+// the coloured tag markup institutionTags() produces.
+function propertyTypeLabel(property) {
+  return property.institutions.length ? property.institutions.join(", ") : "Unaffiliated";
 }
 
 function institutionTags(property) {
@@ -595,7 +588,6 @@ function renderPropertyList() {
 }
 
 function render() {
-  renderHeroSummary();
   renderProgressCards();
   renderInstitutionChips();
   renderLocationBar();
@@ -798,30 +790,35 @@ function renderMap() {
       .join("");
 
     el.ukMap.innerHTML = `
-      <div class="uk-map-layout">
-        <div class="uk-map-svg-wrap" style="--map-aspect:${(mapTransform.width / mapTransform.height).toFixed(4)}">
-          <div class="map-zoom-controls">
-            <button type="button" data-map-zoom="in" aria-label="Zoom in">+</button>
-            <button type="button" data-map-zoom="out" aria-label="Zoom out">−</button>
-            <button type="button" data-map-zoom="reset" aria-label="Reset zoom">⤢</button>
-          </div>
-          <svg class="uk-map-svg" viewBox="0 0 ${mapTransform.width} ${mapTransform.height.toFixed(1)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of visited properties across the UK">
-            <g class="map-nations">${nations}</g>
-            <g class="map-markers"></g>
+      <div class="uk-map-svg-wrap" style="--map-aspect:${(mapTransform.width / mapTransform.height).toFixed(4)}">
+        <div class="map-zoom-controls">
+          <button type="button" data-map-zoom="in" aria-label="Zoom in">+</button>
+          <button type="button" data-map-zoom="out" aria-label="Zoom out">−</button>
+          <button type="button" data-map-zoom="reset" aria-label="Reset zoom">⤢</button>
+        </div>
+        <div class="map-pan-hint" aria-hidden="true" title="Drag to pan, scroll or pinch to zoom">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor">
+            <polygon points="12,2 8,7 16,7"></polygon>
+            <polygon points="12,22 8,17 16,17"></polygon>
+            <polygon points="2,12 7,8 7,16"></polygon>
+            <polygon points="22,12 17,8 17,16"></polygon>
+            <rect x="10" y="7" width="4" height="10"></rect>
+            <rect x="7" y="10" width="10" height="4"></rect>
           </svg>
-          <div class="uk-map-tooltip" hidden></div>
         </div>
-        <div class="map-side">
-          <div class="map-legend">
-            <div class="map-legend-row"><span class="map-legend-dot" style="background:var(--map-visited)"></span> Visited</div>
-            <div class="map-legend-row"><span class="map-legend-dot" style="background:var(--map-unvisited)"></span> Not visited</div>
-          </div>
-          <p class="map-hint map-center-note"></p>
-          <p class="map-hint">Pinch, double-tap, or scroll to zoom; drag to pan; tap a marker for details. Markers respect the filters above.</p>
-          <div class="map-selected"></div>
-          <div class="map-no-coords hidden"></div>
-        </div>
-      </div>`;
+        <svg class="uk-map-svg" viewBox="0 0 ${mapTransform.width} ${mapTransform.height.toFixed(1)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of visited properties across the UK">
+          <g class="map-nations">${nations}</g>
+          <g class="map-markers"></g>
+        </svg>
+        <div class="uk-map-tooltip" hidden></div>
+        <div class="map-selected"></div>
+      </div>
+      <div class="map-legend-bar">
+        <span class="map-legend-item"><span class="map-legend-dot" style="background:var(--map-visited)"></span> Visited</span>
+        <span class="map-legend-item"><span class="map-legend-dot" style="background:var(--map-unvisited)"></span> Not visited</span>
+        <span class="map-center-note"></span>
+      </div>
+      <div class="map-no-coords hidden"></div>`;
 
     svg = el.ukMap.querySelector(".uk-map-svg");
     wireMapInteractions(svg);
@@ -829,8 +826,8 @@ function renderMap() {
     const centerNote = el.ukMap.querySelector(".map-center-note");
     if (centerNote) {
       centerNote.textContent = state.mapDefaultCenter?.source === "location"
-        ? `Opened zoomed to the ${DEFAULT_MAP_RADIUS_MILES} miles around your location.`
-        : `Opened zoomed to the ${DEFAULT_MAP_RADIUS_MILES} miles around London — allow location access to centre on you instead.`;
+        ? `Opened zoomed to the ${DEFAULT_MAP_RADIUS_MILES} miles around your location`
+        : `Opened zoomed to the ${DEFAULT_MAP_RADIUS_MILES} miles around London — allow location access to centre on you instead`;
     }
   }
 
@@ -862,7 +859,9 @@ function renderMapSelection() {
   if (!box) return;
   const property = state.properties.find((p) => p.id === state.selectedPropertyId);
   if (!property) {
-    box.innerHTML = `<p class="map-hint">No place selected.</p>`;
+    // Left empty rather than a placeholder message — .map-selected:empty
+    // collapses to nothing so it doesn't sit over the map when unused.
+    box.innerHTML = "";
     return;
   }
   const location = [property.location, property.country].filter(Boolean).join(", ");
@@ -980,9 +979,15 @@ function wireMapInteractions(svg) {
     }
     if (activePointers.size > 2) return;
 
-    if (e.target.classList.contains("map-marker")) return;
+    // Capturing the pointer (above) retargets the subsequent native "click"
+    // event's target to this svg element rather than the marker actually
+    // pressed, so marker selection can't rely on that click event — the
+    // property id is captured here instead, at the one point e.target is
+    // still trustworthy, and resolved on pointerup below.
+    const isMarker = e.target.classList.contains("map-marker");
+    tapCandidate = { x: e.clientX, y: e.clientY, t: performance.now(), propertyId: isMarker ? Number(e.target.dataset.propertyId) : null };
+    if (isMarker) return;
     dragState = { startX: e.clientX, startY: e.clientY, viewX: view.x, viewY: view.y };
-    tapCandidate = { x: e.clientX, y: e.clientY, t: performance.now() };
   });
 
   svg.addEventListener("pointermove", (e) => {
@@ -1019,7 +1024,8 @@ function wireMapInteractions(svg) {
     const location = [property.location, property.country].filter(Boolean).join(", ");
     const visits = visitsFor(property.id);
     const sub = visits.length ? `Visited ${formatVisitDate(lastVisitDate(property))}` : "Not visited";
-    tip.innerHTML = `${escapeHtml(property.name)}<span class="tooltip-sub">${escapeHtml(location)} · ${escapeHtml(sub)}</span>`;
+    const locationLine = [location, propertyTypeLabel(property)].filter(Boolean).join(" · ");
+    tip.innerHTML = `${escapeHtml(property.name)}<span class="tooltip-sub">${escapeHtml(locationLine)}</span><span class="tooltip-sub">${escapeHtml(sub)}</span>`;
     tip.style.left = `${e.clientX - wrapRect.left}px`;
     tip.style.top = `${e.clientY - wrapRect.top}px`;
     tip.hidden = false;
@@ -1044,17 +1050,23 @@ function wireMapInteractions(svg) {
     if (tapCandidate && activePointers.size === 0) {
       const now = performance.now();
       const moved = Math.hypot(e.clientX - tapCandidate.x, e.clientY - tapCandidate.y);
-      if (now - tapCandidate.t <= TAP_MAX_DURATION_MS && moved <= TAP_MAX_MOVEMENT_PX) {
-        const isDoubleTap =
-          lastTap &&
-          now - lastTap.t <= DOUBLE_TAP_MAX_GAP_MS &&
-          Math.hypot(tapCandidate.x - lastTap.x, tapCandidate.y - lastTap.y) <= DOUBLE_TAP_MAX_DISTANCE_PX;
-        if (isDoubleTap) {
-          const [originX, originY] = toSvgPointXY(tapCandidate.x, tapCandidate.y);
-          zoomAt(DOUBLE_TAP_ZOOM_FACTOR, originX, originY);
-          lastTap = null;
-        } else {
-          lastTap = tapCandidate;
+      if (moved <= TAP_MAX_MOVEMENT_PX) {
+        if (tapCandidate.propertyId !== null) {
+          // No duration limit here — a slow, deliberate press on a marker
+          // should still select it, unlike the double-tap-zoom gesture below.
+          selectMarker(tapCandidate.propertyId);
+        } else if (now - tapCandidate.t <= TAP_MAX_DURATION_MS) {
+          const isDoubleTap =
+            lastTap &&
+            now - lastTap.t <= DOUBLE_TAP_MAX_GAP_MS &&
+            Math.hypot(tapCandidate.x - lastTap.x, tapCandidate.y - lastTap.y) <= DOUBLE_TAP_MAX_DISTANCE_PX;
+          if (isDoubleTap) {
+            const [originX, originY] = toSvgPointXY(tapCandidate.x, tapCandidate.y);
+            zoomAt(DOUBLE_TAP_ZOOM_FACTOR, originX, originY);
+            lastTap = null;
+          } else {
+            lastTap = tapCandidate;
+          }
         }
       }
     }
@@ -1065,13 +1077,12 @@ function wireMapInteractions(svg) {
   svg.addEventListener("pointercancel", endPointer);
   svg.addEventListener("pointerleave", () => { tip.hidden = true; });
 
-  svg.addEventListener("click", (e) => {
-    if (!e.target.classList.contains("map-marker")) return;
-    state.selectedPropertyId = Number(e.target.dataset.propertyId);
+  function selectMarker(propertyId) {
+    state.selectedPropertyId = propertyId;
     svg.querySelectorAll(".map-marker.active").forEach((n) => n.classList.remove("active"));
-    e.target.classList.add("active");
+    svg.querySelector(`.map-marker[data-property-id="${propertyId}"]`)?.classList.add("active");
     renderMapSelection();
-  });
+  }
 }
 
 /* ── View toggle ───────────────────── */
@@ -1314,59 +1325,51 @@ el.filterSearch?.addEventListener("input", (e) => {
   applyFilterChange();
 });
 
-// Wires a row of <button data-value="..."> as a single-select segmented
-// toggle: one "active" at a time, driven by clicks or by setValue(). Used for
-// both the Visited and Sort controls in place of a <select>.
-function wireToggleGroup(container, { onChange } = {}) {
-  const buttons = () => (container ? Array.from(container.querySelectorAll("button[data-value]")) : []);
-  container?.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-value]");
-    if (!btn || btn.classList.contains("active")) return;
-    for (const b of buttons()) {
-      const active = b === btn;
-      b.classList.toggle("active", active);
-      b.setAttribute("aria-selected", active ? "true" : "false");
-    }
-    onChange?.(btn.dataset.value);
+// Wires a single <button data-value="..."> that cycles through a fixed list
+// of values on each click, showing the current one — one joint control per
+// filter instead of a row of separate option buttons.
+function wireCycleToggle(button, values, labels, onChange) {
+  function paint(value) {
+    if (!button) return;
+    button.dataset.value = value;
+    const valueEl = button.querySelector(".cycle-toggle-value");
+    if (valueEl) valueEl.textContent = labels[value];
+  }
+  button?.addEventListener("click", () => {
+    const next = values[(values.indexOf(button.dataset.value) + 1) % values.length];
+    paint(next);
+    onChange(next);
   });
-  return {
-    setValue(value) {
-      for (const b of buttons()) {
-        const active = b.dataset.value === value;
-        b.classList.toggle("active", active);
-        b.setAttribute("aria-selected", active ? "true" : "false");
-      }
-    },
-  };
+  return { setValue: paint };
 }
 
-const visitedToggle = wireToggleGroup(el.filterVisited, {
-  onChange: (value) => {
-    state.filters.visited = value;
-    writeFilterPrefs();
-    applyFilterChange();
-  },
+const VISITED_VALUES = ["all", "visited", "unvisited"];
+const VISITED_LABELS = { all: "All", visited: "Visited", unvisited: "Not visited" };
+const visitedToggle = wireCycleToggle(el.filterVisited, VISITED_VALUES, VISITED_LABELS, (value) => {
+  state.filters.visited = value;
+  writeFilterPrefs();
+  applyFilterChange();
 });
 
-const sortToggle = wireToggleGroup(el.filterSort, {
-  onChange: async (value) => {
-    state.filters.sort = value;
-    writeFilterPrefs();
+const SORT_VALUES = ["name", "distance"];
+const SORT_LABELS = { name: "A–Z", distance: "Nearest to me" };
+const sortToggle = wireCycleToggle(el.filterSort, SORT_VALUES, SORT_LABELS, async (value) => {
+  state.filters.sort = value;
+  writeFilterPrefs();
 
-    if (value === "distance" && !state.userLocation) {
-      applyFilterChange();
-      const position = await requestLocation();
-      if (!position) {
-        // Without a fix, "nearest to me" would just be alphabetical order wearing
-        // a misleading label, so drop back to the default sort.
-        state.filters.sort = "name";
-        sortToggle.setValue("name");
-        writeFilterPrefs();
-      }
-    }
-
+  if (value === "distance" && !state.userLocation) {
     applyFilterChange();
-  },
+    const position = await requestLocation();
+    if (!position) {
+      // Without a fix, "nearest to me" would just be alphabetical order wearing
+      // a misleading label, so drop back to the default sort.
+      state.filters.sort = "name";
+      sortToggle.setValue("name");
+      writeFilterPrefs();
+    }
+  }
+
+  applyFilterChange();
 });
 
 document.getElementById("refresh-location")?.addEventListener("click", async () => {

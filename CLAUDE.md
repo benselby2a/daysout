@@ -69,6 +69,17 @@ Pinch-zoom and double-tap-to-zoom are hand-rolled on top of Pointer Events in
 is wrapped in try/catch there because a throw from it would otherwise abort the
 rest of that pointerdown handler, silently breaking the tracking setup below it.
 
+Marker selection does **not** use the native `click` event, on purpose:
+`svg.setPointerCapture()` is called on every pointerdown (needed so a pinch
+that starts with a finger on a marker still gets tracked), and a captured
+pointer retargets the resulting `click`'s `e.target` to the `<svg>` itself
+rather than the marker — silently breaking `e.target.classList.contains(...)`
+checks in a click handler. Selection is instead resolved inside the same
+pointerup-based tap detection used for double-tap-zoom (see `tapCandidate` and
+`selectMarker()`), which reads `e.target` at pointerdown time before capture
+can interfere. This one is easy to reintroduce — if marker clicks ever stop
+selecting, check here first before assuming the DOM markup broke.
+
 ## Verifying changes
 
 There are no unit tests. The app is checked by driving it in Chromium with

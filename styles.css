@@ -182,12 +182,6 @@ h1, h2, h3, h4, p { margin: 0; }
   font-size: 0.78rem;
 }
 
-.hero-summary {
-  margin-top: 0.4rem;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
 /* ── Panel ─────────────────────────── */
 
 .panel {
@@ -211,19 +205,19 @@ h1, h2, h3, h4, p { margin: 0; }
 /* ── Progress cards ────────────────── */
 
 .progress-cards {
-  margin-top: 12px;
+  margin-top: 10px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
 }
 
 .progress-card {
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  padding: 6px 9px;
   background: var(--countdown-bg);
   display: grid;
-  gap: 6px;
+  gap: 3px;
 }
 
 .progress-card.total {
@@ -232,34 +226,37 @@ h1, h2, h3, h4, p { margin: 0; }
 }
 
 .progress-card-name {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .progress-card-swatch {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex: none;
 }
 
 .progress-card-value {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   font-weight: 600;
 }
 
 .progress-card-value span {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--muted);
 }
 
 .progress-bar {
-  height: 6px;
+  height: 4px;
   border-radius: 999px;
   background: var(--unvisited-bg);
   overflow: hidden;
@@ -288,14 +285,24 @@ h1, h2, h3, h4, p { margin: 0; }
   gap: 4px;
 }
 
-.toggle-fill { flex-wrap: wrap; }
-
-.toggle-fill button {
-  flex: 1;
-  white-space: nowrap;
-  padding: 8px 10px;
-  font-size: 0.85rem;
+/* One joint control per filter — click cycles through its values — instead
+   of a row of separate option buttons. */
+.cycle-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   min-height: 40px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.cycle-toggle-icon {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .filter-label {
@@ -644,26 +651,22 @@ button.ghost {
 
 /* ── Map ───────────────────────────── */
 
-.uk-map-layout {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: 14px;
-  align-items: start;
-}
-
 /* The UK is roughly twice as tall as it is wide, so the map is sized from its
-   own aspect ratio (set inline as --map-aspect) rather than filling the column,
-   which would letterbox the outline inside a wide band of empty sea. */
+   own aspect ratio (set inline as --map-aspect) rather than filling the panel
+   width outright, which would letterbox the outline inside a wide band of
+   empty sea. There is no side column any more — the legend is a slim bar
+   below the map instead — so this can claim most of the panel's height. */
 .uk-map-svg-wrap {
+  margin-top: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--map-sea);
   overflow: hidden;
   position: relative;
   touch-action: none;
-  width: min(100%, calc(74vh * var(--map-aspect, 0.55)));
-  margin: 0 auto;
+  width: min(100%, calc(88vh * var(--map-aspect, 0.55)));
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .uk-map-svg {
@@ -718,44 +721,66 @@ button.ghost {
   margin-top: 2px;
 }
 
-.map-side { display: grid; gap: 10px; }
-
-.map-legend {
-  display: grid;
-  gap: 6px;
-  font-size: 0.82rem;
+/* A slim caption strip below the map — legend items side by side, plus the
+   default-centring note — rather than a side column competing with the map
+   for width. */
+.map-legend-bar {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  font-size: 0.8rem;
   color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
 }
 
-.map-legend-row {
-  display: flex;
+.map-legend-item {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .map-legend-dot {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex: none;
 }
 
-.map-hint { font-size: 0.78rem; color: var(--muted); }
+.map-center-note {
+  font-size: 0.76rem;
+  opacity: 0.85;
+}
 
+/* A floating card over the map itself rather than a permanent side column, so
+   the map keeps the space when nothing is selected — :empty collapses it
+   completely rather than leaving a blank bordered box. */
 .map-selected {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: min(260px, calc(100% - 20px));
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   padding: 10px 12px;
   display: grid;
   gap: 8px;
+  background: var(--card);
+  box-shadow: var(--shadow-1);
+  z-index: 6;
+}
+
+.map-selected:empty {
+  display: none;
+  padding: 0;
+  border: none;
+  box-shadow: none;
 }
 
 .map-selected .property-actions { justify-content: flex-start; }
 
 .map-no-coords {
+  margin-top: 8px;
   font-size: 0.8rem;
   color: var(--muted);
   border: 1px dashed var(--line-strong);
@@ -780,6 +805,25 @@ button.ghost {
   line-height: 1;
   background: var(--card);
   opacity: 0.92;
+}
+
+/* A quiet, non-interactive cue that the map can be dragged/pinched/scrolled —
+   deliberately an icon rather than instructional text. */
+.map-pan-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--muted);
+  opacity: 0.75;
+  pointer-events: none;
+  z-index: 3;
 }
 
 /* ── Visit history ─────────────────── */
@@ -923,8 +967,7 @@ button.ghost {
 /* ── Responsive ────────────────────── */
 
 @media (max-width: 900px) {
-  .uk-map-layout { grid-template-columns: 1fr; }
-  .uk-map-svg-wrap { width: min(100%, calc(62vh * var(--map-aspect, 0.55))); }
+  .uk-map-svg-wrap { width: min(100%, calc(74vh * var(--map-aspect, 0.55))); }
 }
 
 @media (max-width: 700px) {

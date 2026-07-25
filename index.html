@@ -50,7 +50,6 @@
         </div>
         <p class="kicker">Historic houses &amp; gardens</p>
         <h1>🐳 Days Out 🏰🌷</h1>
-        <p id="hero-summary" class="hero-summary"></p>
       </header>
 
       <section class="panel" aria-labelledby="progress-heading">
@@ -77,18 +76,17 @@
           </label>
           <div class="filter-toggle-group">
             <span class="filter-label">Visited</span>
-            <div id="filter-visited" class="toggle toggle-fill" role="tablist" aria-label="Visited filter">
-              <button type="button" data-value="all" class="active" role="tab" aria-selected="true">All</button>
-              <button type="button" data-value="visited" role="tab" aria-selected="false">Visited</button>
-              <button type="button" data-value="unvisited" role="tab" aria-selected="false">Not visited</button>
-            </div>
+            <button type="button" id="filter-visited" class="cycle-toggle" data-value="all" aria-label="Visited filter: click to cycle">
+              <span class="cycle-toggle-value">All</span>
+              <span class="cycle-toggle-icon" aria-hidden="true">⇄</span>
+            </button>
           </div>
           <div class="filter-toggle-group">
             <span class="filter-label">Sort</span>
-            <div id="filter-sort" class="toggle toggle-fill" role="tablist" aria-label="Sort order">
-              <button type="button" data-value="name" class="active" role="tab" aria-selected="true">A–Z</button>
-              <button type="button" data-value="distance" role="tab" aria-selected="false">Nearest to me</button>
-            </div>
+            <button type="button" id="filter-sort" class="cycle-toggle" data-value="name" aria-label="Sort order: click to cycle">
+              <span class="cycle-toggle-value">A–Z</span>
+              <span class="cycle-toggle-icon" aria-hidden="true">⇄</span>
+            </button>
           </div>
         </div>
 
