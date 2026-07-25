@@ -632,6 +632,13 @@ button.ghost {
 .map-marker {
   stroke: var(--card);
   stroke-width: 0.5;
+  /* Without this, stroke-width is in SVG user units and scales with the
+     viewBox — zooming in (a smaller viewBox over the same screen area)
+     otherwise makes the same numeric stroke render visibly thicker on
+     screen, the opposite of what a "border" should do. This pins it to
+     screen pixels regardless of current zoom, matching how marker radius
+     is already kept constant on screen via currentMapZoom. */
+  vector-effect: non-scaling-stroke;
   cursor: pointer;
   transition: r 120ms ease;
 }
@@ -646,6 +653,7 @@ button.ghost {
 .map-marker-cluster circle {
   stroke: var(--card);
   stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
   transition: r 120ms ease;
 }
 
@@ -658,6 +666,32 @@ button.ghost {
   text-anchor: middle;
   dominant-baseline: central;
   pointer-events: none;
+}
+
+/* Not a property — a fixed landmark so the map always has something to
+   orient by: the user's own location once known, or a house icon at London
+   before that (or if permission is denied). Never interactive. */
+.map-location-marker {
+  pointer-events: none;
+}
+
+.map-location-pulse {
+  fill: var(--accent);
+  opacity: 0.22;
+}
+
+.map-location-dot {
+  fill: var(--accent);
+  stroke: var(--card);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-location-house path {
+  fill: var(--accent);
+  stroke: var(--card);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
 
 .uk-map-tooltip {

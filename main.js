@@ -663,8 +663,15 @@ function ensureUkMapLoaded() {
         // The map already opened using whatever location was known (or
         // London) rather than waiting on this — fetch in the background
         // purely so later uses (e.g. "Nearest to me", or reopening the map
-        // tab) can land on a resolved location without asking again.
-        if (!state.userLocation) requestLocation({ silent: true });
+        // tab) can land on a resolved location without asking again. It does
+        // swap the house-at-London marker for a "you are here" one in place
+        // if it resolves while the map is still open, without recentring.
+        if (!state.userLocation) {
+          requestLocation({ silent: true }).then(() => {
+            const svg = el.ukMap?.querySelector(".uk-map-svg");
+            if (state.userLocation && svg) drawLocationMarker(svg);
+          });
+        }
       })
       .catch((err) => {
         console.error("[Days Out] Failed to load the UK map:", err);
@@ -779,6 +786,37 @@ function drawMapMarkers(svg) {
   return rows.length - plotted.length;
 }
 
+// A simple house pictogram (roof + body) in a local -10..10 coordinate
+// space, scaled/positioned via a transform so it can share the same
+// constant-on-screen-size approach as the property markers.
+const HOUSE_ICON_PATH = "M -9 4 L 0 -9 L 9 4 L 9 10 L -9 10 Z";
+
+// Not a property — always exactly one marker so the map has a landmark to
+// orient by: the resolved location once known, or a house icon at London
+// before that (or if geolocation is denied). Redrawn alongside the property
+// markers on every render and zoom step so its on-screen size stays constant.
+function drawLocationMarker(svg) {
+  const group = svg.querySelector(".map-location-marker");
+  if (!group) return;
+
+  const r = MAP_MARKER_RADIUS / currentMapZoom;
+  if (state.userLocation) {
+    const [x, y] = projectToMap(state.userLocation.longitude, state.userLocation.latitude);
+    group.innerHTML = `
+      <circle class="map-location-pulse" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r * 1.8).toFixed(2)}"></circle>
+      <circle class="map-location-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r * 0.7).toFixed(2)}"></circle>`;
+    group.setAttribute("aria-label", "Your location");
+  } else {
+    const [x, y] = projectToMap(LONDON.longitude, LONDON.latitude);
+    const scale = (r / 10).toFixed(3);
+    group.innerHTML = `
+      <g class="map-location-house" transform="translate(${x.toFixed(1)}, ${y.toFixed(1)}) scale(${scale})">
+        <path d="${HOUSE_ICON_PATH}"></path>
+      </g>`;
+    group.setAttribute("aria-label", "London");
+  }
+}
+
 function renderMap() {
   if (!el.ukMap) return;
   if (!state.mapFeatures) {
@@ -821,6 +859,7 @@ function renderMap() {
         <svg class="uk-map-svg" viewBox="0 0 ${mapTransform.width} ${mapTransform.height.toFixed(1)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of visited properties across the UK">
           <g class="map-nations">${nations}</g>
           <g class="map-markers"></g>
+          <g class="map-location-marker"></g>
         </svg>
         <div class="uk-map-tooltip" hidden></div>
         <div class="map-selected"></div>
@@ -837,6 +876,7 @@ function renderMap() {
   }
 
   const missing = drawMapMarkers(svg);
+  drawLocationMarker(svg);
 
   const noCoords = el.ukMap.querySelector(".map-no-coords");
   if (noCoords) {
@@ -902,11 +942,18 @@ function wireMapInteractions(svg) {
     // separation between markers, but redrawing on every applyView() call is
     // still cheap enough at this data size not to bother special-casing it.
     drawMapMarkers(svg);
+    drawLocationMarker(svg);
   }
 
+  // The old /12 floor (city-region scale at best) wasn't deep enough to ever
+  // separate real properties a few hundred metres apart — zoomToSeparate()
+  // below would hit this clamp and give up while a cluster was still only
+  // partly split (e.g. a 3-member cluster resolving to "1 + 2" instead of
+  // three individual markers). /5000 gives street-level zoom, which is what
+  // actually resolving tightly-grouped properties needs.
   function clampView() {
-    view.w = Math.min(baseView.w, Math.max(baseView.w / 12, view.w));
-    view.h = Math.min(baseView.h, Math.max(baseView.h / 12, view.h));
+    view.w = Math.min(baseView.w, Math.max(baseView.w / 5000, view.w));
+    view.h = Math.min(baseView.h, Math.max(baseView.h / 5000, view.h));
     view.x = Math.min(baseView.w - view.w, Math.max(0, view.x));
     view.y = Math.min(baseView.h - view.h, Math.max(0, view.y));
   }

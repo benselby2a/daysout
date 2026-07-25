@@ -134,16 +134,22 @@ marker was drawn. Tapping a merged cluster (more than one id) also calls
 `zoomToSeparate()`, which zooms in step-by-step on the group's centre until
 `clusterPoints()` would no longer merge every original member into one
 cluster — so tapping the icon actually reveals the individual markers it
-replaced, rather than leaving the same icon on screen. It stops early if a
-zoom step doesn't change `view.w` (the app's own max-zoom clamp in
-`clampView()` was reached first), so two properties only metres apart on the
-ground (e.g. Alnwick Castle and The Alnwick Garden) can legitimately stay
-merged rather than the loop spinning forever chasing a separation the zoom
-level can't reach — and since it only checks the tapped group against itself,
-a member can still end up newly clustered with some other, previously distant
-property that panning/zooming toward the group's centre brought close by on
-screen; that's an accepted side effect of clustering being recomputed from
-*all* currently-plotted properties, not a bug. The selection card becomes a small carousel
+replaced, rather than leaving the same icon on screen — it keeps zooming
+until *every* original member is its own singleton cluster, not just until
+the group splits into smaller sub-clusters (a 3+ member cluster resolving to
+"1 + 2" instead of three individual markers was the bug this closed).
+`clampView()`'s zoom-in floor is `baseView.w / 5000` (street-level) rather
+than the old `/12` (city-region level at best) specifically so this can
+actually reach real-world properties a few hundred metres apart — the old
+floor meant genuinely distinct places (e.g. Alnwick Castle and The Alnwick
+Garden, ~270m apart) could never separate no matter how far `zoomToSeparate`
+tried. It still stops early if a zoom step doesn't change `view.w` (that
+floor reached), so pointer-coincident data doesn't spin the loop forever —
+and since it only checks the tapped group against itself, a member can still
+end up newly clustered with some other, previously distant property that
+zooming toward the group's centre brought close by on screen; that's an
+accepted side effect of clustering being recomputed from *all*
+currently-plotted properties, not a bug. The selection card becomes a small carousel
 (`data-cluster-nav="prev"/"next"`, `state.selectedCardIndex`) whenever that
 list has more than one entry. The card also has a
 `data-action="close-map-selection"` × in the corner, handled by the same
@@ -176,6 +182,24 @@ centred, so a text caption saying so again was redundant. Marker strokes
 (`.map-marker`/`.map-marker-cluster circle`) are deliberately thin
 (0.5–0.75px, thicker only on hover/active) so the border reads as a subtle
 outline rather than competing with the institution-colour fill for attention.
+Those all carry `vector-effect: non-scaling-stroke` — without it, stroke-width
+is in SVG user units and scales with the viewBox, so the same numeric value
+renders visibly *thicker* the further you zoom in (the opposite of what a
+border should do); this pins it to screen pixels regardless of zoom, the same
+constant-on-screen-size goal `MAP_MARKER_RADIUS / currentMapZoom` already
+gives the marker's radius.
+
+The map always shows exactly one non-property landmark marker
+(`drawLocationMarker()`, in its own `.map-location-marker` group so
+`drawMapMarkers()` rebuilding `.map-markers` never touches it): a pulsing
+"you are here" dot at `state.userLocation` once known, or a house icon at
+`LONDON` before that (covers both "permission not yet granted" and "denied" —
+there's no third state to render differently). It's redrawn alongside the
+property markers on every render and zoom step for the same constant-size
+reason, and also right after the silent background geolocation fetch in
+`ensureUkMapLoaded()` resolves, swapping the London house for the real dot in
+place without recentring the map (consistent with that fetch never
+retroactively moving the view either).
 
 ## Verifying changes
 
@@ -198,9 +222,16 @@ list filters, the progress cards' dual role as the institution filter (picking
 one, picking "All places" to clear, the `aria-checked`/`role="radio"` state),
 the map (marker count should match the filtered rows, the default zoom framing
 shouldn't be confused with a full-UK view when selecting a marker by id,
-clusters should show the right count and un-merge into individual markers on
-zoom-in, hovering a marker/cluster should show only the custom tooltip and
-never a native one, and marker colour should track the property's institution
-with unvisited noticeably lighter than visited), mark-visited, add/edit
+clusters should show the right count and fully un-merge into individual
+markers on zoom-in or on tapping the cluster — not partially, e.g. a 3+
+member cluster resolving to "1 + 2" —, hovering a marker/cluster should show
+only the custom tooltip and never a native one, marker colour should track
+the property's institution with unvisited noticeably lighter than visited,
+the location marker should be a house icon at London with no geolocation
+permission and a "you are here" dot once granted, and marker/cluster borders
+should stay visually thin even zoomed in deep), mark-visited, add/edit
 property, the duplicate-name and half-coordinate validations, and both light
-and dark themes.
+and dark themes. To test the location marker, geolocation must be set on the
+Playwright **browser context** (`browser.newContext({ geolocation: {...},
+permissions: ["geolocation"] })`), not the page — and Chromium only honours
+it when both options are set together.

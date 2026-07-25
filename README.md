@@ -19,7 +19,9 @@ Cadw, RHS gardens and independent houses.
   zooming in until they're no longer touching splits them back into individual
   markers. Tapping either opens a selection card — a small carousel when more
   than one property is involved — with a × to close it. Tapping a merged icon
-  also zooms in until it splits back into its individual markers
+  also zooms in until it splits back into its individual markers. A pulsing
+  dot marks your current location once known, or a house icon at London
+  stands in for it until then
 - **Mark a place as visited or not**, a single toggle — no dates, notes, or
   visit history to manage
 - **Add your own properties**, capturing name, location, institution(s),
