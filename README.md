@@ -27,7 +27,7 @@ In the Supabase SQL editor, run the SQL in:
 - `supabase.sql`
 
 That creates the `daysout` schema (a `properties` table and a `visits` table),
-sets up row level security, and seeds 261 starter properties.
+sets up row level security, and seeds 313 starter properties.
 
 Then, in **Project Settings > API > Exposed schemas**, add `daysout` so
 PostgREST can see it. Without this the app loads but every query fails.
@@ -63,12 +63,18 @@ your data.
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` at the top of `main.js` currently point
   at the same Supabase project as the other apps, using a separate `daysout`
   schema to keep the tables apart. Change them if you want a different project.
-- **Seed data caveats.** The 261 starter properties are a hand-built list, not an
-  official export. Coordinates are approximate positions — good to a few hundred
-  metres, which is well inside a pixel at UK map scale — and every field is
-  editable in the app. Website links are left blank rather than guessed, and the
-  institution tags are a starting point: RHS Partner Garden membership in
-  particular changes year to year, so only a handful of places carry that tag.
+- **Seed data caveats.** The 313 starter properties are a hand-built list, not an
+  official export — the primary sources (historichouses.org, rhs.org.uk,
+  Wikipedia) block direct fetches from this environment, so the Historic Houses
+  and RHS Partner Garden entries in particular were compiled from web search
+  result snippets and cross-checked, not scraped from an official directory.
+  Coordinates are approximate positions — good to a few hundred metres, which is
+  well inside a pixel at UK map scale — and every field is editable in the app.
+  Website links are left blank rather than guessed, and the institution tags
+  are a starting point: RHS Partner Garden membership in particular changes
+  year to year (the RHS added a batch of new partner gardens for 2026, some
+  reflected here), so treat that tag as approximate and correct it in the app
+  as needed.
 - **Association grouping is display only.** The filter chips and progress cards
   group bodies by the membership that gets you in — National Trust covers the
   National Trust for Scotland, English Heritage covers Cadw and Historic
