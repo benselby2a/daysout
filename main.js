@@ -223,7 +223,9 @@ function readFilterPrefs() {
       search: typeof saved.search === "string" ? saved.search : "",
       visited: ["all", "visited", "unvisited"].includes(saved.visited) ? saved.visited : "all",
       sort: ["name", "distance"].includes(saved.sort) ? saved.sort : "name",
-      institutions: Array.isArray(saved.institutions) ? saved.institutions : [],
+      // At most one — a stale multi-selection from before filters became
+      // mutually exclusive shouldn't linger and silently narrow the list.
+      institutions: Array.isArray(saved.institutions) ? saved.institutions.slice(0, 1) : [],
     });
   } catch (_) {
     // Ignore unreadable/corrupt preferences and start from the defaults.
@@ -511,7 +513,7 @@ function renderInstitutionChips() {
     .map((group) => {
       if (!group.count) return "";
       const active = state.filters.institutions.includes(group.key);
-      return `<button type="button" class="chip-toggle" data-institution="${escapeHtml(group.key)}" aria-pressed="${active}">
+      return `<button type="button" class="chip-toggle" data-institution="${escapeHtml(group.key)}" role="radio" aria-checked="${active}">
         <span class="chip-swatch" style="background:${escapeHtml(cssColour(group.varName))}"></span>
         ${escapeHtml(group.label)}
         <span class="chip-count">${group.count}</span>
@@ -1377,10 +1379,12 @@ el.institutionChips?.addEventListener("click", (e) => {
   const chip = e.target.closest("[data-institution]");
   if (!chip) return;
   const name = chip.dataset.institution;
-  const active = state.filters.institutions.includes(name);
-  state.filters.institutions = active
-    ? state.filters.institutions.filter((i) => i !== name)
-    : [...state.filters.institutions, name];
+  // Mutually exclusive: picking one clears any other, and picking the one
+  // that's already active clears back to "no filter" (all institutions) —
+  // previously this appended, so a chip picked earlier and forgotten about
+  // silently kept narrowing the list alongside whatever was clicked next.
+  const isOnlySelected = state.filters.institutions.length === 1 && state.filters.institutions[0] === name;
+  state.filters.institutions = isOnlySelected ? [] : [name];
   writeFilterPrefs();
   renderInstitutionChips();
   renderPropertyList();
