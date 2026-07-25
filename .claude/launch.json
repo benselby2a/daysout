@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "daysout-app",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-p", "4322", "."],
+      "port": 4322
+    }
+  ]
+}

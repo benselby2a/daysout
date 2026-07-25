@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Days Out</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon.svg" />
+    <link rel="stylesheet" href="styles.css?v=20260725-1" />
+    <script>
+      if (window !== window.parent) {
+        document.documentElement.setAttribute('data-hub', '');
+        window.addEventListener('message', function(e) {
+          if (e.data && e.data.type === 'theme') {
+            document.documentElement.setAttribute('data-theme', e.data.value);
+          }
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <div id="page-loading-overlay" class="page-loading-overlay" aria-hidden="true">
+      <div class="page-spinner"></div>
+    </div>
+
+    <div id="auth-gate" class="auth-gate hidden">
+      <div class="auth-card">
+        <h1>🏰🌷 Days Out</h1>
+        <p>Sign in to continue.</p>
+        <form id="sign-in-form">
+          <label>Email
+            <input id="sign-in-email" type="email" placeholder="you@example.com" required />
+          </label>
+          <label>Password
+            <input id="sign-in-password" type="password" placeholder="Password" required minlength="6" />
+          </label>
+          <div id="auth-error" style="color:#ef5350;font-size:0.8rem;margin-top:0.5rem"></div>
+          <button id="sign-in-btn" type="submit">Sign In</button>
+        </form>
+      </div>
+    </div>
+
+    <main class="app hidden" id="app-main">
+      <header class="hero">
+        <div class="hub-hide" style="display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:0.5rem 0">
+          <span id="user-email" style="font-size:0.75rem;color:var(--muted)"></span>
+          <button id="sign-out-btn" type="button" style="font-size:0.7rem;padding:0.15rem 0.4rem;min-height:auto;cursor:pointer">Sign Out</button>
+          <button id="theme-toggle-btn" type="button" aria-label="Toggle theme" style="font-size:0.7rem;padding:0.15rem 0.4rem;min-height:auto;cursor:pointer">🌙</button>
+        </div>
+        <p class="kicker">Historic houses &amp; gardens</p>
+        <h1>Days Out 🏰🌷</h1>
+        <p id="hero-summary" class="hero-summary"></p>
+      </header>
+
+      <section class="panel" aria-labelledby="progress-heading">
+        <div class="panel-head">
+          <h2 id="progress-heading">Progress</h2>
+          <button id="open-add-property" type="button">Add Property</button>
+        </div>
+        <div id="progress-cards" class="progress-cards"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="places-heading">
+        <div class="panel-head">
+          <h2 id="places-heading">Places</h2>
+          <div class="toggle" role="tablist" aria-label="View toggle">
+            <button id="list-tab" class="active" data-view="list" role="tab" aria-selected="true">List</button>
+            <button id="map-tab" data-view="map" role="tab" aria-selected="false">Map</button>
+          </div>
+        </div>
+
+        <div class="filters">
+          <label class="filter-search">
+            <span class="filter-label">Search</span>
+            <input id="filter-search" type="search" placeholder="Name or location…" autocomplete="off" />
+          </label>
+          <label>
+            <span class="filter-label">Visited</span>
+            <select id="filter-visited">
+              <option value="all">All places</option>
+              <option value="visited">Visited only</option>
+              <option value="unvisited">Not visited only</option>
+            </select>
+          </label>
+          <label>
+            <span class="filter-label">Country</span>
+            <select id="filter-country">
+              <option value="all">All countries</option>
+              <option value="England">England</option>
+              <option value="Scotland">Scotland</option>
+              <option value="Wales">Wales</option>
+              <option value="Northern Ireland">Northern Ireland</option>
+            </select>
+          </label>
+          <label>
+            <span class="filter-label">Sort</span>
+            <select id="filter-sort">
+              <option value="name">Name (A–Z)</option>
+              <option value="location">Location</option>
+              <option value="recent">Most recently visited</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="institution-filter">
+          <span class="filter-label">Institution</span>
+          <div id="institution-chips" class="chip-row" role="group" aria-label="Filter by institution"></div>
+        </div>
+
+        <p id="result-count" class="result-count" aria-live="polite"></p>
+
+        <div id="list-view">
+          <div id="property-list"></div>
+        </div>
+
+        <div id="map-view" class="hidden">
+          <div id="uk-map"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="property-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="property-modal-title">
+      <div class="modal-card">
+        <div class="panel-head">
+          <h2 id="property-modal-title">Add Property</h2>
+          <button id="property-cancel" type="button">Close</button>
+        </div>
+        <form id="property-form" class="grid-form" autocomplete="off" onsubmit="event.preventDefault(); return false;">
+          <input type="hidden" name="propertyId" />
+          <label class="full-width">
+            Name
+            <input type="text" name="name" placeholder="e.g. Stourhead" required />
+          </label>
+          <div class="form-row">
+            <label>
+              Location
+              <input type="text" name="location" placeholder="e.g. Wiltshire" />
+            </label>
+            <label>
+              Country
+              <select name="country" required>
+                <option value="England">England</option>
+                <option value="Scotland">Scotland</option>
+                <option value="Wales">Wales</option>
+                <option value="Northern Ireland">Northern Ireland</option>
+              </select>
+            </label>
+          </div>
+          <label class="full-width">
+            Institutions
+            <div id="property-institutions" class="checkbox-wrap"></div>
+          </label>
+          <label class="full-width">
+            Other institution
+            <input type="text" name="customInstitution" placeholder="Add one not listed above" />
+          </label>
+          <div class="form-row">
+            <label>
+              Latitude
+              <input type="number" name="latitude" step="0.0001" min="-90" max="90" placeholder="51.1030" />
+            </label>
+            <label>
+              Longitude
+              <input type="number" name="longitude" step="0.0001" min="-180" max="180" placeholder="-2.3220" />
+            </label>
+          </div>
+          <p class="field-hint full-width">Coordinates are optional, but a property needs them to appear on the map.</p>
+          <label class="full-width">
+            Website
+            <input type="url" name="website" placeholder="https://…" />
+          </label>
+          <label class="full-width">
+            Notes
+            <textarea name="notes" rows="2" placeholder="Anything worth remembering"></textarea>
+          </label>
+          <div id="property-form-error" class="form-error hidden" aria-live="polite"></div>
+          <div class="form-actions-row">
+            <button type="button" id="remove-property" class="danger hidden">Remove Property</button>
+            <button type="submit" id="property-submit">Add Property</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="visit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="visit-modal-title">
+      <div class="modal-card">
+        <div class="panel-head">
+          <h2 id="visit-modal-title">Mark as Visited</h2>
+          <button id="visit-cancel" type="button">Close</button>
+        </div>
+        <p id="visit-modal-property" class="visit-modal-property"></p>
+        <form id="visit-form" class="grid-form" autocomplete="off" onsubmit="event.preventDefault(); return false;">
+          <input type="hidden" name="propertyId" />
+          <label class="full-width">
+            <span>Date visited <span class="optional">(optional)</span></span>
+            <input type="date" name="visitedOn" />
+          </label>
+          <label class="full-width">
+            <span>Notes <span class="optional">(optional)</span></span>
+            <textarea name="notes" rows="2" placeholder="Who came, what the weather did…"></textarea>
+          </label>
+          <button type="submit">Save Visit</button>
+        </form>
+        <div id="visit-history"></div>
+      </div>
+    </div>
+
+    <div id="status-toast" class="status-toast hidden" role="status" aria-live="polite"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
+    <script src="main.js?v=20260725-1"></script>
+  </body>
+</html>

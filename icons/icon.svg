@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Days Out">
+  <rect width="512" height="512" rx="96" fill="#0f766e"/>
+  <g fill="#f4f7f2">
+    <path d="M256 96 128 176v48h256v-48z"/>
+    <rect x="152" y="240" width="40" height="128" rx="6"/>
+    <rect x="236" y="240" width="40" height="128" rx="6"/>
+    <rect x="320" y="240" width="40" height="128" rx="6"/>
+    <rect x="120" y="384" width="272" height="36" rx="10"/>
+  </g>
+  <circle cx="256" cy="150" r="16" fill="#0f766e"/>
+</svg>
