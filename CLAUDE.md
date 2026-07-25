@@ -17,6 +17,14 @@ Structure follows the sibling `holidaycalendar` app: `index.html` + `main.js` +
 `styles.css`, Supabase over the CDN client, an email/password auth gate, hub
 theme integration via `postMessage`, and a PWA manifest.
 
+**Bump the `?v=` cache-busting suffix on `main.js` and `styles.css` in
+`index.html` every time either file changes**, even for a same-day follow-up
+edit — GitHub Pages' CDN caches those URLs verbatim, so an unchanged query
+string means returning visitors keep getting the old file indefinitely,
+however many commits have landed since. This has already caused a live "new
+feature isn't clickable / doesn't do anything" report once (the browser was
+still running JS from before the feature existed).
+
 ## Supabase
 
 - One shared Supabase project across the apps, each with **its own schema**.
