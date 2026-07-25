@@ -48,22 +48,89 @@ if (inHub) {
 // belong to several (an RHS Partner Garden that is also a National Trust place),
 // so these are stored as a text[] rather than a single column.
 const INSTITUTIONS = [
-  { name: "National Trust", short: "NT", varName: "--inst-nt" },
-  { name: "National Trust for Scotland", short: "NTS", varName: "--inst-nts" },
-  { name: "English Heritage", short: "EH", varName: "--inst-eh" },
-  { name: "Historic Environment Scotland", short: "HES", varName: "--inst-hes" },
-  { name: "Cadw", short: "Cadw", varName: "--inst-cadw" },
-  { name: "RHS Garden", short: "RHS", varName: "--inst-rhs" },
-  { name: "RHS Partner Garden", short: "RHS Partner", varName: "--inst-rhsp" },
-  { name: "Historic Houses", short: "HH", varName: "--inst-hh" },
+  { name: "National Trust", varName: "--inst-nt" },
+  { name: "National Trust for Scotland", varName: "--inst-nts" },
+  { name: "English Heritage", varName: "--inst-eh" },
+  { name: "Historic Environment Scotland", varName: "--inst-hes" },
+  { name: "Cadw", varName: "--inst-cadw" },
+  { name: "RHS Garden", varName: "--inst-rhs" },
+  { name: "RHS Partner Garden", varName: "--inst-rhsp" },
+  { name: "Historic Houses", varName: "--inst-hh" },
 ];
 
 const INSTITUTION_BY_NAME = new Map(INSTITUTIONS.map((i) => [i.name, i]));
 
-function institutionColour(name) {
-  const known = INSTITUTION_BY_NAME.get(name);
-  const varName = known ? known.varName : "--muted";
+// Several of these bodies have reciprocal entry arrangements, so the filters and
+// the progress cards group them by the membership that actually gets you in.
+// This is presentation only: each property keeps its exact association in the
+// database and still displays it in full on its own row.
+const INSTITUTION_GROUPS = [
+  {
+    key: "National Trust",
+    label: "National Trust",
+    varName: "--inst-nt",
+    members: ["National Trust", "National Trust for Scotland"],
+  },
+  {
+    key: "English Heritage",
+    label: "English Heritage",
+    varName: "--inst-eh",
+    members: ["English Heritage", "Cadw", "Historic Environment Scotland"],
+  },
+  {
+    key: "RHS",
+    label: "RHS",
+    varName: "--inst-rhs",
+    members: ["RHS Garden", "RHS Partner Garden"],
+  },
+  {
+    key: "Historic Houses",
+    label: "Historic Houses",
+    varName: "--inst-hh",
+    members: ["Historic Houses"],
+  },
+];
+
+const GROUPED_INSTITUTION_NAMES = new Set(INSTITUTION_GROUPS.flatMap((g) => g.members));
+
+function cssColour(varName) {
   return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || "#6b7280";
+}
+
+function institutionColour(name) {
+  return cssColour(INSTITUTION_BY_NAME.get(name)?.varName || "--muted");
+}
+
+// The built-in groups, plus a one-member group for any institution typed in by
+// hand so it still gets its own filter chip and progress card.
+function institutionGroups() {
+  const custom = new Set();
+  for (const property of state.properties) {
+    for (const name of property.institutions) {
+      if (!GROUPED_INSTITUTION_NAMES.has(name)) custom.add(name);
+    }
+  }
+
+  const all = [
+    ...INSTITUTION_GROUPS,
+    ...[...custom]
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ key: name, label: name, varName: "--muted", members: [name] })),
+  ];
+
+  return all.map((group) => {
+    const rows = state.properties.filter((p) => p.institutions.some((i) => group.members.includes(i)));
+    return { ...group, rows, count: rows.length };
+  });
+}
+
+const GROUP_MEMBERS_BY_KEY = new Map(INSTITUTION_GROUPS.map((g) => [g.key, g.members]));
+
+// Expands the selected group keys into the institution names actually stored on
+// properties. An unrecognised key is treated as a literal institution name, so
+// hand-typed institutions and filters saved before grouping existed both work.
+function selectedInstitutionNames() {
+  return state.filters.institutions.flatMap((key) => GROUP_MEMBERS_BY_KEY.get(key) || [key]);
 }
 
 const state = {
@@ -369,8 +436,11 @@ function filteredProperties() {
     if (visited === "visited" && !isVisited(p)) return false;
     if (visited === "unvisited" && isVisited(p)) return false;
     // An empty institution filter means "no institution filter", and a property
-    // matches if it belongs to any of the selected ones.
-    if (institutions.length && !p.institutions.some((i) => institutions.includes(i))) return false;
+    // matches if it belongs to any institution in any of the selected groups.
+    if (institutions.length) {
+      const selected = selectedInstitutionNames();
+      if (!p.institutions.some((i) => selected.includes(i))) return false;
+    }
     return true;
   });
 
@@ -437,19 +507,18 @@ function renderProgressCards() {
     </div>`,
   ];
 
-  // Only show an institution card when the list actually contains places for it,
-  // so a pared-back list does not render a row of empty cards.
-  for (const institution of INSTITUTIONS) {
-    const rows = state.properties.filter((p) => p.institutions.includes(institution.name));
-    if (!rows.length) continue;
-    const done = rows.filter(isVisited).length;
+  // Only show a card when the list actually contains places for that group, so a
+  // pared-back list does not render a row of empty cards.
+  for (const group of institutionGroups()) {
+    if (!group.count) continue;
+    const done = group.rows.filter(isVisited).length;
     cards.push(`<div class="progress-card">
       <div class="progress-card-name">
-        <span class="progress-card-swatch" style="background:${escapeHtml(institutionColour(institution.name))}"></span>
-        ${escapeHtml(institution.short)}
+        <span class="progress-card-swatch" style="background:${escapeHtml(cssColour(group.varName))}"></span>
+        ${escapeHtml(group.label)}
       </div>
-      <div class="progress-card-value">${done} <span>/ ${rows.length}</span></div>
-      <div class="progress-bar"><div class="progress-bar-fill" style="width:${(done / rows.length) * 100}%"></div></div>
+      <div class="progress-card-value">${done} <span>/ ${group.count}</span></div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width:${(done / group.count) * 100}%"></div></div>
     </div>`);
   }
 
@@ -458,26 +527,14 @@ function renderProgressCards() {
 
 function renderInstitutionChips() {
   if (!el.institutionChips) return;
-  // Include any institution typed in by hand alongside the built-in list.
-  const custom = new Set();
-  for (const p of state.properties) {
-    for (const i of p.institutions) if (!INSTITUTION_BY_NAME.has(i)) custom.add(i);
-  }
-  const all = [
-    ...INSTITUTIONS.map((i) => i.name),
-    ...[...custom].sort((a, b) => a.localeCompare(b)),
-  ];
-
-  el.institutionChips.innerHTML = all
-    .map((name) => {
-      const count = state.properties.filter((p) => p.institutions.includes(name)).length;
-      if (!count) return "";
-      const active = state.filters.institutions.includes(name);
-      const label = INSTITUTION_BY_NAME.get(name)?.short || name;
-      return `<button type="button" class="chip-toggle" data-institution="${escapeHtml(name)}" aria-pressed="${active}">
-        <span class="chip-swatch" style="background:${escapeHtml(institutionColour(name))}"></span>
-        ${escapeHtml(label)}
-        <span class="chip-count">${count}</span>
+  el.institutionChips.innerHTML = institutionGroups()
+    .map((group) => {
+      if (!group.count) return "";
+      const active = state.filters.institutions.includes(group.key);
+      return `<button type="button" class="chip-toggle" data-institution="${escapeHtml(group.key)}" aria-pressed="${active}">
+        <span class="chip-swatch" style="background:${escapeHtml(cssColour(group.varName))}"></span>
+        ${escapeHtml(group.label)}
+        <span class="chip-count">${group.count}</span>
       </button>`;
     })
     .join("");
@@ -485,14 +542,15 @@ function renderInstitutionChips() {
 
 function institutionTags(property) {
   if (!property.institutions.length) return `<span class="tag tag-institution">Unaffiliated</span>`;
+  // Always the exact association in full, never the group it filters under, so
+  // an NTS castle stays distinguishable from a National Trust one.
   return property.institutions
-    .map((name) => {
-      const label = INSTITUTION_BY_NAME.get(name)?.short || name;
-      return `<span class="tag tag-institution">
+    .map(
+      (name) => `<span class="tag tag-institution">
         <span class="chip-swatch" style="background:${escapeHtml(institutionColour(name))}"></span>
-        ${escapeHtml(label)}
-      </span>`;
-    })
+        ${escapeHtml(name)}
+      </span>`
+    )
     .join("");
 }
 
@@ -878,7 +936,7 @@ function toggleView(view) {
 function renderInstitutionCheckboxes(selected = []) {
   if (!el.propertyInstitutions) return;
   el.propertyInstitutions.innerHTML = INSTITUTIONS.map(
-    (i) => `<label><input type="checkbox" name="institution" value="${escapeHtml(i.name)}"${selected.includes(i.name) ? " checked" : ""} /> ${escapeHtml(i.short)}</label>`
+    (i) => `<label><input type="checkbox" name="institution" value="${escapeHtml(i.name)}"${selected.includes(i.name) ? " checked" : ""} /> ${escapeHtml(i.name)}</label>`
   ).join("");
 }
 

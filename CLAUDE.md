@@ -42,6 +42,13 @@ Visits are rows in `daysout.visits`, not a boolean on the property, so a place
 can be visited repeatedly and `visited_on` is nullable ("visited, no idea
 when"). Anything deriving visited state should go through `isVisited()`.
 
+Properties store their **exact** association (`National Trust for Scotland`,
+`Cadw`, …). `INSTITUTION_GROUPS` in `main.js` groups those by membership for the
+filter chips and progress cards only — never write a group name into the
+database. Filter state stores group keys, and `selectedInstitutionNames()`
+expands them, falling back to treating an unknown key as a literal institution
+name so hand-typed values and pre-grouping saved filters keep working.
+
 `data/uk.json` holds the four UK nation outlines, extracted from Natural Earth
 1:10m `admin_0_map_subunits` (public domain), simplified and stripped of tiny
 islands. The app projects it with an Albers equal-area conic tuned to the UK

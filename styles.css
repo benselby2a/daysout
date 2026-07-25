@@ -588,10 +588,12 @@ button.ghost {
 
 /* ── Checkbox wrap ─────────────────── */
 
+/* Full association names are long, so these read better as aligned columns than
+   as a wrapping row. */
 .checkbox-wrap {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px 14px;
   padding: 6px 0;
 }
 
@@ -601,6 +603,8 @@ button.ghost {
   gap: 6px;
   font-size: 0.85rem;
 }
+
+.checkbox-wrap input { flex: none; }
 
 /* ── View toggle ───────────────────── */
 

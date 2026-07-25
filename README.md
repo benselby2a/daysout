@@ -65,6 +65,13 @@ your data.
   editable in the app. Website links are left blank rather than guessed, and the
   institution tags are a starting point: RHS Partner Garden membership in
   particular changes year to year, so only a handful of places carry that tag.
+- **Association grouping is display only.** The filter chips and progress cards
+  group bodies by the membership that gets you in — National Trust covers the
+  National Trust for Scotland, English Heritage covers Cadw and Historic
+  Environment Scotland, and RHS covers both RHS Gardens and RHS Partner Gardens.
+  Each property still stores and shows its exact association, so an NTS castle
+  stays distinguishable from a National Trust one. Change the grouping in
+  `INSTITUTION_GROUPS` in `main.js`; no migration is needed.
 - A property needs both a latitude and a longitude to appear on the map. The map
   view says how many filtered places are missing coordinates.
 - Visits are stored as rows in `daysout.visits` rather than a flag on the
