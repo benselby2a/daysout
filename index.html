@@ -54,10 +54,10 @@
 
       <section class="panel" aria-labelledby="progress-heading">
         <div class="panel-head">
-          <h2 id="progress-heading">Progress</h2>
+          <h2 id="progress-heading">Visited Properties</h2>
           <button id="open-add-property" type="button">Add Property</button>
         </div>
-        <div id="progress-cards" class="progress-cards"></div>
+        <div id="progress-cards" class="progress-cards" role="radiogroup" aria-label="Filter by institution"></div>
       </section>
 
       <section class="panel" aria-labelledby="places-heading">
@@ -88,16 +88,6 @@
               <span class="cycle-toggle-icon" aria-hidden="true">⇄</span>
             </button>
           </div>
-        </div>
-
-        <div class="institution-filter">
-          <span class="filter-label">Institution</span>
-          <div id="institution-chips" class="chip-row" role="radiogroup" aria-label="Filter by institution"></div>
-        </div>
-
-        <div id="location-bar" class="location-bar hidden">
-          <span id="location-status" aria-live="polite"></span>
-          <button type="button" id="refresh-location" class="ghost">Update location</button>
         </div>
 
         <p id="result-count" class="result-count" aria-live="polite"></p>

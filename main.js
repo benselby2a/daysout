@@ -145,7 +145,10 @@ const state = {
   view: "list",
   mapFeatures: null,
   mapDefaultCenter: null,
-  selectedPropertyId: null,
+  // Ordered by distance to the last tap (closest first); more than one entry
+  // means a cluster of nearby markers, browsed via selectedCardIndex.
+  selectedPropertyIds: [],
+  selectedCardIndex: 0,
   // Held in memory only — the browser re-asks (or reuses its own permission
   // grant) each session rather than us persisting anyone's whereabouts.
   userLocation: null,
@@ -156,7 +159,6 @@ const el = {
   progressCards: document.getElementById("progress-cards"),
   propertyList: document.getElementById("property-list"),
   resultCount: document.getElementById("result-count"),
-  institutionChips: document.getElementById("institution-chips"),
   filterSearch: document.getElementById("filter-search"),
   filterVisited: document.getElementById("filter-visited"),
   filterSort: document.getElementById("filter-sort"),
@@ -297,7 +299,6 @@ function getCurrentPosition(options) {
 async function requestLocation({ silent = false, force = false } = {}) {
   if (state.locationPending) return state.userLocation;
   state.locationPending = true;
-  renderLocationBar();
   try {
     const position = await getCurrentPosition({
       enableHighAccuracy: false,
@@ -324,29 +325,7 @@ async function requestLocation({ silent = false, force = false } = {}) {
     return null;
   } finally {
     state.locationPending = false;
-    renderLocationBar();
   }
-}
-
-function renderLocationBar() {
-  const bar = document.getElementById("location-bar");
-  const status = document.getElementById("location-status");
-  const refresh = document.getElementById("refresh-location");
-  if (!bar || !status) return;
-
-  const relevant = state.filters.sort === "distance" || !!state.userLocation || state.locationPending;
-  bar.classList.toggle("hidden", !relevant);
-  if (!relevant) return;
-
-  if (state.locationPending) {
-    status.textContent = "Getting your location…";
-  } else if (state.userLocation) {
-    const time = new Date(state.userLocation.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-    status.textContent = `Distances are straight-line from your location, found at ${time}.`;
-  } else {
-    status.textContent = "Your location is not available.";
-  }
-  if (refresh) refresh.disabled = state.locationPending;
 }
 
 // Restoring a saved "nearest to me" sort must not fire a permission prompt out
@@ -463,50 +442,37 @@ function filteredProperties() {
 
 /* ── Rendering ─────────────────────── */
 
+// The cards double as the institution filter for the list below: each is a
+// radio-style button (data-institution="" for "All places"), so there is one
+// control for both "how many have I done" and "show me just these" rather
+// than a separate chip row repeating the same institutions.
 function renderProgressCards() {
   if (!el.progressCards) return;
   const total = state.properties.length;
   const visited = state.properties.filter(isVisited).length;
+  const activeInstitution = state.filters.institutions[0] ?? null;
 
-  const cards = [
-    `<div class="progress-card total">
-      <div class="progress-card-name">All places</div>
-      <div class="progress-card-value">${visited} <span>/ ${total}</span></div>
-      <div class="progress-bar"><div class="progress-bar-fill" style="width:${total ? (visited / total) * 100 : 0}%"></div></div>
-    </div>`,
-  ];
+  const card = (key, label, swatch, done, count) => `
+    <button type="button" class="progress-card${key === null ? " total" : ""}" data-institution="${escapeHtml(key ?? "")}" role="radio" aria-checked="${activeInstitution === key}">
+      <div class="progress-card-name">
+        ${swatch ? `<span class="progress-card-swatch" style="background:${escapeHtml(swatch)}"></span>` : ""}
+        ${escapeHtml(label)}
+      </div>
+      <div class="progress-card-value">${done} <span>/ ${count}</span></div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width:${count ? (done / count) * 100 : 0}%"></div></div>
+    </button>`;
 
-  // Only show a card when the list actually contains places for that group, so a
-  // pared-back list does not render a row of empty cards.
+  const cards = [card(null, "All places", null, visited, total)];
+
+  // Only show a card when the list actually contains places for that group, so
+  // a pared-back list does not render a row of empty cards.
   for (const group of institutionGroups()) {
     if (!group.count) continue;
     const done = group.rows.filter(isVisited).length;
-    cards.push(`<div class="progress-card">
-      <div class="progress-card-name">
-        <span class="progress-card-swatch" style="background:${escapeHtml(cssColour(group.varName))}"></span>
-        ${escapeHtml(group.label)}
-      </div>
-      <div class="progress-card-value">${done} <span>/ ${group.count}</span></div>
-      <div class="progress-bar"><div class="progress-bar-fill" style="width:${(done / group.count) * 100}%"></div></div>
-    </div>`);
+    cards.push(card(group.key, group.label, cssColour(group.varName), done, group.count));
   }
 
   el.progressCards.innerHTML = cards.join("");
-}
-
-function renderInstitutionChips() {
-  if (!el.institutionChips) return;
-  el.institutionChips.innerHTML = institutionGroups()
-    .map((group) => {
-      if (!group.count) return "";
-      const active = state.filters.institutions.includes(group.key);
-      return `<button type="button" class="chip-toggle" data-institution="${escapeHtml(group.key)}" role="radio" aria-checked="${active}">
-        <span class="chip-swatch" style="background:${escapeHtml(cssColour(group.varName))}"></span>
-        ${escapeHtml(group.label)}
-        <span class="chip-count">${group.count}</span>
-      </button>`;
-    })
-    .join("");
 }
 
 // Plain-text institution list for contexts (map tooltip) that can't render
@@ -589,8 +555,6 @@ function renderPropertyList() {
 
 function render() {
   renderProgressCards();
-  renderInstitutionChips();
-  renderLocationBar();
   renderPropertyList();
   if (state.view === "map") renderMap();
 }
@@ -616,21 +580,17 @@ function projectAlbers(lon, lat) {
 
 const MAP_WIDTH = 620;
 const MAP_PADDING = 12;
-const MAP_MARKER_RADIUS = 7;
+const MAP_MARKER_RADIUS = 10;
+// On-screen pixels within which a tap counts multiple markers as one cluster.
+const MAP_CLUSTER_RADIUS_PX = 24;
 let mapTransform = null;
 let currentMapZoom = 1;
 
 // Where the map opens by default: a radius around the user's location, or
-// around London if location is unavailable or declined. This only sets the
-// starting view — the full UK is still reachable via the zoom-out control.
+// around London if location isn't already known. This only sets the starting
+// view — the full UK is still reachable via the zoom-out control.
 const LONDON = { latitude: 51.5074, longitude: -0.1278 };
 const DEFAULT_MAP_RADIUS_MILES = 50;
-// How long the map waits for a location fix before opening on London instead.
-// Deliberately much shorter than requestLocation's own 15s timeout: this is a
-// passive convenience on opening a tab, not a response to an explicit request,
-// so it must never leave the map stuck behind a spinner over an unanswered
-// permission prompt.
-const MAP_LOCATION_GRACE_MS = 2500;
 
 // Approximates a circle of the given radius as a lat/lon box, good enough for
 // framing a map view (not used for distance sorting, which uses haversineKm).
@@ -645,32 +605,13 @@ function boundingBoxForRadius(center, radiusKm) {
   };
 }
 
-let mapDefaultCenterPromise = null;
-
-// Resolves once to the point the map should open centred on: the user's
-// location if it's already known or already granted, else London. Never
-// rejects and never asks more than once per page load, so returning to the
-// map tab later doesn't re-prompt.
-function ensureMapDefaultCenter() {
-  if (!mapDefaultCenterPromise) {
-    mapDefaultCenterPromise = (async () => {
-      if (state.userLocation) return { ...state.userLocation, source: "location" };
-      try {
-        const permission = await navigator.permissions?.query({ name: "geolocation" });
-        if (permission?.state === "denied") return { ...LONDON, source: "london" };
-      } catch (_) {
-        // Permissions API unavailable — fall through and just try once.
-      }
-      // requestLocation is not cancelled by losing this race — it keeps running
-      // and still populates state.userLocation in the background, so a slow
-      // permission response still benefits later uses (e.g. "Nearest to me")
-      // even though this particular map-open already fell back to London.
-      const grace = new Promise((resolve) => setTimeout(() => resolve(null), MAP_LOCATION_GRACE_MS));
-      const position = await Promise.race([requestLocation({ silent: true }), grace]);
-      return position ? { ...position, source: "location" } : { ...LONDON, source: "london" };
-    })();
-  }
-  return mapDefaultCenterPromise;
+// The map never waits on a location fix before opening — it uses whatever is
+// already known immediately (state.userLocation from an earlier "Nearest to
+// me" use, or London), so opening the tab is never held up behind an
+// unanswered permission prompt. See the fire-and-forget requestLocation call
+// in ensureUkMapLoaded() for how it can still end up centred on you.
+function resolveMapDefaultCenter() {
+  return state.userLocation ? { ...state.userLocation, source: "location" } : { ...LONDON, source: "london" };
 }
 
 // Fits the projected UK into the SVG viewBox. Albers y increases northwards and
@@ -741,15 +682,17 @@ async function loadUkMap() {
 let ukMapPromise = null;
 function ensureUkMapLoaded() {
   if (!ukMapPromise) {
-    // Loaded together so the first render already knows both the outlines and
-    // where to open the view — otherwise the map would flash the full UK
-    // extent before jumping to the local view a moment later.
-    ukMapPromise = Promise.all([loadUkMap(), ensureMapDefaultCenter()])
-      .then(([features, center]) => {
+    ukMapPromise = loadUkMap()
+      .then((features) => {
         state.mapFeatures = features;
-        state.mapDefaultCenter = center;
+        state.mapDefaultCenter = resolveMapDefaultCenter();
         mapTransform = computeMapTransform(features);
         renderMap();
+        // The map already opened using whatever location was known (or
+        // London) rather than waiting on this — fetch in the background
+        // purely so later uses (e.g. "Nearest to me", or reopening the map
+        // tab) can land on a resolved location without asking again.
+        if (!state.userLocation) requestLocation({ silent: true });
       })
       .catch((err) => {
         console.error("[Days Out] Failed to load the UK map:", err);
@@ -836,7 +779,7 @@ function renderMap() {
     .map((p) => {
       const [x, y] = projectToMap(p.longitude, p.latitude);
       const visited = isVisited(p);
-      const active = state.selectedPropertyId === p.id;
+      const active = state.selectedPropertyIds[state.selectedCardIndex] === p.id;
       return `<circle class="map-marker ${visited ? "visited" : "unvisited"}${active ? " active" : ""}"
         cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(MAP_MARKER_RADIUS / currentMapZoom).toFixed(2)}"
         data-property-id="${p.id}"><title>${escapeHtml(p.name)}</title></circle>`;
@@ -857,7 +800,8 @@ function renderMap() {
 function renderMapSelection() {
   const box = el.ukMap?.querySelector(".map-selected");
   if (!box) return;
-  const property = state.properties.find((p) => p.id === state.selectedPropertyId);
+  const ids = state.selectedPropertyIds;
+  const property = state.properties.find((p) => p.id === ids[state.selectedCardIndex]);
   if (!property) {
     // Left empty rather than a placeholder message — .map-selected:empty
     // collapses to nothing so it doesn't sit over the map when unused.
@@ -865,7 +809,18 @@ function renderMapSelection() {
     return;
   }
   const location = [property.location, property.country].filter(Boolean).join(", ");
+  // Several markers can sit close enough together that a tap can't cleanly
+  // hit just one — the card becomes a small carousel over all of them.
+  const clusterNav = ids.length > 1
+    ? `<div class="map-cluster-nav">
+        <button type="button" class="ghost" data-cluster-nav="prev" aria-label="Previous property here">‹</button>
+        <span class="map-cluster-count">${state.selectedCardIndex + 1} of ${ids.length} here</span>
+        <button type="button" class="ghost" data-cluster-nav="next" aria-label="Next property here">›</button>
+      </div>`
+    : "";
   box.innerHTML = `
+    <button type="button" class="map-selected-close" data-action="close-map-selection" aria-label="Close">×</button>
+    ${clusterNav}
     <div class="property-title"><span class="property-name">${escapeHtml(property.name)}</span></div>
     ${location ? `<div class="property-location">${escapeHtml(location)}</div>` : ""}
     <div class="property-meta">${visitedTag(property)}${distanceTag(property)}${institutionTags(property)}</div>
@@ -890,6 +845,12 @@ function wireMapInteractions(svg) {
     // change) come in at the right size instead of momentarily full-size.
     currentMapZoom = baseView.w / view.w;
     svg.querySelectorAll(".map-marker").forEach((node) => node.setAttribute("r", (MAP_MARKER_RADIUS / currentMapZoom).toFixed(2)));
+    // The wrapper's own box shape tracks whatever's currently in view rather
+    // than staying fixed to the full UK's tall/narrow silhouette — the default
+    // local view is roughly square, and sizing the wrapper for the *country's*
+    // proportions would letterbox it down to a fraction of the available
+    // width. Panning/zooming back out to the whole UK reshapes it back.
+    wrap.style.setProperty("--map-aspect", (view.w / view.h).toFixed(4));
   }
 
   function clampView() {
@@ -959,6 +920,11 @@ function wireMapInteractions(svg) {
   }
 
   svg.addEventListener("pointerdown", (e) => {
+    // Without this, dragging the mouse to pan (or double-clicking to zoom)
+    // is indistinguishable from a text-selection drag/word-select to the
+    // browser, which highlights whatever the cursor passes over — especially
+    // noticeable on a trackpad once the pointer strays outside the map.
+    e.preventDefault();
     activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     // A capture failure must not abort the rest of this handler — the pinch/tap
     // tracking set up below still needs to run either way.
@@ -1054,7 +1020,8 @@ function wireMapInteractions(svg) {
         if (tapCandidate.propertyId !== null) {
           // No duration limit here — a slow, deliberate press on a marker
           // should still select it, unlike the double-tap-zoom gesture below.
-          selectMarker(tapCandidate.propertyId);
+          const [svgX, svgY] = toSvgPointXY(tapCandidate.x, tapCandidate.y);
+          selectMarkerCluster(svgX, svgY);
         } else if (now - tapCandidate.t <= TAP_MAX_DURATION_MS) {
           const isDoubleTap =
             lastTap &&
@@ -1077,10 +1044,27 @@ function wireMapInteractions(svg) {
   svg.addEventListener("pointercancel", endPointer);
   svg.addEventListener("pointerleave", () => { tip.hidden = true; });
 
-  function selectMarker(propertyId) {
-    state.selectedPropertyId = propertyId;
+  // Several markers can sit close enough on screen that a tap can't cleanly
+  // land on just one, especially once zoomed out — gathers every marker
+  // within a fixed on-screen radius of the tap (converted to the current
+  // viewBox's units so "close" means close on screen at any zoom level),
+  // closest first, so the selection card can page through all of them.
+  function selectMarkerCluster(svgX, svgY) {
+    const rect = svg.getBoundingClientRect();
+    const radiusSvgUnits = MAP_CLUSTER_RADIUS_PX * (view.w / rect.width);
+    const nearby = mappableProperties(filteredProperties())
+      .map((p) => {
+        const [x, y] = projectToMap(p.longitude, p.latitude);
+        return { id: p.id, dist: Math.hypot(x - svgX, y - svgY) };
+      })
+      .filter((m) => m.dist <= radiusSvgUnits)
+      .sort((a, b) => a.dist - b.dist)
+      .map((m) => m.id);
+
+    state.selectedPropertyIds = nearby;
+    state.selectedCardIndex = 0;
     svg.querySelectorAll(".map-marker.active").forEach((n) => n.classList.remove("active"));
-    svg.querySelector(`.map-marker[data-property-id="${propertyId}"]`)?.classList.add("active");
+    if (nearby[0] !== undefined) svg.querySelector(`.map-marker[data-property-id="${nearby[0]}"]`)?.classList.add("active");
     renderMapSelection();
   }
 }
@@ -1227,7 +1211,11 @@ async function removeCurrentProperty() {
     const { error } = await db.from("properties").delete().eq("id", id);
     if (error) throw error;
     el.propertyModal.classList.add("hidden");
-    if (state.selectedPropertyId === id) state.selectedPropertyId = null;
+    const removedIndex = state.selectedPropertyIds.indexOf(id);
+    if (removedIndex !== -1) {
+      state.selectedPropertyIds = state.selectedPropertyIds.filter((pid) => pid !== id);
+      if (state.selectedCardIndex >= state.selectedPropertyIds.length) state.selectedCardIndex = 0;
+    }
     await loadData();
     render();
     showToast(`Removed ${property.name}.`);
@@ -1314,7 +1302,6 @@ async function deleteVisit(visitId) {
 /* ── Events ────────────────────────── */
 
 function applyFilterChange() {
-  renderLocationBar();
   renderPropertyList();
   if (state.view === "map") renderMap();
 }
@@ -1372,24 +1359,18 @@ const sortToggle = wireCycleToggle(el.filterSort, SORT_VALUES, SORT_LABELS, asyn
   applyFilterChange();
 });
 
-document.getElementById("refresh-location")?.addEventListener("click", async () => {
-  const position = await requestLocation({ force: true });
-  if (position) showToast("Location updated.");
-  applyFilterChange();
-});
-
-el.institutionChips?.addEventListener("click", (e) => {
-  const chip = e.target.closest("[data-institution]");
-  if (!chip) return;
-  const name = chip.dataset.institution;
+el.progressCards?.addEventListener("click", (e) => {
+  const card = e.target.closest("[data-institution]");
+  if (!card) return;
+  const key = card.dataset.institution; // "" means the "All places" card
   // Mutually exclusive: picking one clears any other, and picking the one
-  // that's already active clears back to "no filter" (all institutions) —
-  // previously this appended, so a chip picked earlier and forgotten about
+  // that's already active clears back to "All places" — previously the
+  // separate chip row appended, so a chip picked earlier and forgotten about
   // silently kept narrowing the list alongside whatever was clicked next.
-  const isOnlySelected = state.filters.institutions.length === 1 && state.filters.institutions[0] === name;
-  state.filters.institutions = isOnlySelected ? [] : [name];
+  const isOnlySelected = state.filters.institutions.length === 1 && state.filters.institutions[0] === key;
+  state.filters.institutions = key === "" || isOnlySelected ? [] : [key];
   writeFilterPrefs();
-  renderInstitutionChips();
+  renderProgressCards();
   renderPropertyList();
   if (state.view === "map") renderMap();
 });
@@ -1406,10 +1387,28 @@ document.addEventListener("click", (e) => {
     return;
   }
 
+  if (action === "close-map-selection") {
+    state.selectedPropertyIds = [];
+    state.selectedCardIndex = 0;
+    document.querySelectorAll(".map-marker.active").forEach((n) => n.classList.remove("active"));
+    renderMapSelection();
+    return;
+  }
+
   const property = state.properties.find((p) => p.id === Number(button.dataset.propertyId));
   if (!property) return;
   if (action === "visit") openVisitModal(property);
   if (action === "edit") openPropertyModal(property);
+});
+
+document.addEventListener("click", (e) => {
+  const nav = e.target.closest("[data-cluster-nav]");
+  if (!nav) return;
+  const count = state.selectedPropertyIds.length;
+  if (!count) return;
+  const delta = nav.dataset.clusterNav === "next" ? 1 : -1;
+  state.selectedCardIndex = (state.selectedCardIndex + delta + count) % count;
+  renderMapSelection();
 });
 
 el.listTab?.addEventListener("click", () => toggleView("list"));

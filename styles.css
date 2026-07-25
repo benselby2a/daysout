@@ -211,6 +211,9 @@ h1, h2, h3, h4, p { margin: 0; }
   gap: 6px;
 }
 
+/* Each card is a button that also filters the list below by that
+   institution — aria-checked marks whichever one is the active filter
+   ("All places" when none is). */
 .progress-card {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -218,9 +221,13 @@ h1, h2, h3, h4, p { margin: 0; }
   background: var(--countdown-bg);
   display: grid;
   gap: 3px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
 }
 
-.progress-card.total {
+.progress-card[aria-checked="true"] {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
@@ -313,76 +320,11 @@ h1, h2, h3, h4, p { margin: 0; }
   color: var(--muted);
 }
 
-.institution-filter {
-  margin-top: 12px;
-  display: grid;
-  gap: 6px;
-}
-
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.chip-toggle {
-  border: 1px solid var(--line);
-  background: var(--input-bg);
-  color: var(--muted);
-  border-radius: 999px;
-  min-height: 32px;
-  padding: 4px 12px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.chip-toggle[aria-checked="true"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.chip-toggle .chip-swatch {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
-}
-
-.chip-toggle .chip-count {
-  font-weight: 500;
-  opacity: 0.75;
-}
 
 .result-count {
   margin-top: 12px;
   font-size: 0.82rem;
   color: var(--muted);
-}
-
-.location-bar {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
-.location-bar button {
-  min-height: 30px;
-  padding: 4px 10px;
-  font-size: 0.78rem;
-}
-
-.location-bar button[disabled] {
-  opacity: 0.6;
-  cursor: default;
-  transform: none;
 }
 
 /* ── Property list ─────────────────── */
@@ -651,11 +593,14 @@ button.ghost {
 
 /* ── Map ───────────────────────────── */
 
-/* The UK is roughly twice as tall as it is wide, so the map is sized from its
-   own aspect ratio (set inline as --map-aspect) rather than filling the panel
-   width outright, which would letterbox the outline inside a wide band of
-   empty sea. There is no side column any more — the legend is a slim bar
-   below the map instead — so this can claim most of the panel's height. */
+/* Sized from --map-aspect (width/height of whatever is currently in view)
+   rather than filling the panel width outright, which would letterbox the
+   content inside a band of empty sea whenever the shown crop is narrower
+   than the panel. applyView() keeps --map-aspect in sync with the live
+   viewBox on every pan/zoom, so a roughly-square local crop actually claims
+   most of the panel's width, and zooming back out to the tall/narrow full UK
+   reshapes the box to match. There is no side column — the legend is a slim
+   bar below the map instead — so this can also claim most of the height. */
 .uk-map-svg-wrap {
   margin-top: 10px;
   border: 1px solid var(--line);
@@ -664,6 +609,10 @@ button.ghost {
   overflow: hidden;
   position: relative;
   touch-action: none;
+  /* Belt-and-braces alongside the pointerdown preventDefault() in
+     wireMapInteractions() — dragging to pan must never read as a
+     text-selection drag once the cursor strays outside the map. */
+  user-select: none;
   width: min(100%, calc(88vh * var(--map-aspect, 0.55)));
   margin-left: auto;
   margin-right: auto;
@@ -762,12 +711,35 @@ button.ghost {
   max-width: min(260px, calc(100% - 20px));
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
+  padding: 10px 30px 10px 12px;
   display: grid;
   gap: 8px;
   background: var(--card);
   box-shadow: var(--shadow-1);
   z-index: 6;
+}
+
+.map-selected-close {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-height: auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-selected-close:hover {
+  color: var(--text);
+  transform: none;
 }
 
 .map-selected:empty {
@@ -778,6 +750,29 @@ button.ghost {
 }
 
 .map-selected .property-actions { justify-content: flex-start; }
+
+.map-cluster-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -2px -2px 2px;
+}
+
+.map-cluster-nav button {
+  min-height: 28px;
+  min-width: 28px;
+  padding: 0 8px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.map-cluster-count {
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 .map-no-coords {
   margin-top: 8px;

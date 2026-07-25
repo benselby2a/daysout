@@ -4,15 +4,18 @@ Track visits to historic houses and gardens around the UK — National Trust,
 English Heritage, National Trust for Scotland, Historic Environment Scotland,
 Cadw, RHS gardens and independent houses.
 
-- **List view** with filters for visited / not visited and institution, plus a
-  free-text search and per-institution progress
-- **Sort** alphabetically or by distance from where you are, using the
-  browser's location
+- **List view** with a free-text search, a Visited toggle (All / Visited / Not
+  visited) and a Sort toggle (A–Z / Nearest to me), each a single button that
+  cycles through its values. The "Visited Properties" progress cards double as
+  the institution filter — click one to narrow the list to it, click again
+  (or click "All places") to clear
 - **Map view** — a polygon map of the UK with every property plotted by
-  coordinates, coloured by whether you have been. Opens zoomed to the 50 miles
-  around your location (or London if location isn't available), with pinch,
-  double-tap/double-click, scroll, and on-screen +/− controls to zoom, and drag
-  to pan
+  coordinates, coloured by whether you have been. Opens immediately (it never
+  waits on a location fix) zoomed to the 50 miles around your location if
+  already known, or London otherwise, with pinch, double-tap/double-click,
+  scroll, and on-screen +/− controls to zoom, and drag to pan. Markers close
+  enough together to overlap open as a small carousel card instead of picking
+  one arbitrarily
 - **Mark a place as visited**, with an optional date and notes. A place can be
   visited more than once, and "visited, no idea when" is a valid entry
 - **Add your own properties**, capturing name, location, institution(s),
@@ -75,11 +78,11 @@ your data.
   year to year (the RHS added a batch of new partner gardens for 2026, some
   reflected here), so treat that tag as approximate and correct it in the app
   as needed.
-- **Association grouping is display only.** The filter chips and progress cards
-  group bodies by the membership that gets you in — National Trust covers the
-  National Trust for Scotland, English Heritage covers Cadw and Historic
-  Environment Scotland, and RHS covers both RHS Gardens and RHS Partner Gardens.
-  Each property still stores and shows its exact association, so an NTS castle
+- **Association grouping is display only.** The progress cards group bodies by
+  the membership that gets you in — National Trust covers the National Trust
+  for Scotland, English Heritage covers Cadw and Historic Environment
+  Scotland, and RHS covers both RHS Gardens and RHS Partner Gardens. Each
+  property still stores and shows its exact association, so an NTS castle
   stays distinguishable from a National Trust one. Change the grouping in
   `INSTITUTION_GROUPS` in `main.js`; no migration is needed.
 - A property needs both a latitude and a longitude to appear on the map. The map
@@ -94,7 +97,8 @@ your data.
   Your position is held in memory for the session only — it is never written to
   local storage or sent to Supabase. Reloading the page with that sort saved
   will not re-prompt unless you already granted permission. Geolocation needs
-  HTTPS, which GitHub Pages provides.
+  HTTPS, which GitHub Pages provides. There is no separate "getting your
+  location…" status bar — the list or map just updates once it resolves.
 - `data/uk.json` holds the England / Scotland / Wales / Northern Ireland
   outlines, extracted from the Natural Earth 1:10m `admin_0_map_subunits`
   dataset (public domain), simplified and trimmed of very small islands. It is
