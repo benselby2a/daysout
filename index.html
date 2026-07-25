@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Days Out</title>
+    <title>🐳 Days Out</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/icon.svg" />
@@ -26,7 +26,7 @@
 
     <div id="auth-gate" class="auth-gate hidden">
       <div class="auth-card">
-        <h1>🏰🌷 Days Out</h1>
+        <h1>🐳 🏰🌷 Days Out</h1>
         <p>Sign in to continue.</p>
         <form id="sign-in-form">
           <label>Email
@@ -49,7 +49,7 @@
           <button id="theme-toggle-btn" type="button" aria-label="Toggle theme" style="font-size:0.7rem;padding:0.15rem 0.4rem;min-height:auto;cursor:pointer">🌙</button>
         </div>
         <p class="kicker">Historic houses &amp; gardens</p>
-        <h1>Days Out 🏰🌷</h1>
+        <h1>🐳 Days Out 🏰🌷</h1>
         <p id="hero-summary" class="hero-summary"></p>
       </header>
 
@@ -75,33 +75,21 @@
             <span class="filter-label">Search</span>
             <input id="filter-search" type="search" placeholder="Name or location…" autocomplete="off" />
           </label>
-          <label>
+          <div class="filter-toggle-group">
             <span class="filter-label">Visited</span>
-            <select id="filter-visited">
-              <option value="all">All places</option>
-              <option value="visited">Visited only</option>
-              <option value="unvisited">Not visited only</option>
-            </select>
-          </label>
-          <label>
-            <span class="filter-label">Country</span>
-            <select id="filter-country">
-              <option value="all">All countries</option>
-              <option value="England">England</option>
-              <option value="Scotland">Scotland</option>
-              <option value="Wales">Wales</option>
-              <option value="Northern Ireland">Northern Ireland</option>
-            </select>
-          </label>
-          <label>
+            <div id="filter-visited" class="toggle toggle-fill" role="tablist" aria-label="Visited filter">
+              <button type="button" data-value="all" class="active" role="tab" aria-selected="true">All</button>
+              <button type="button" data-value="visited" role="tab" aria-selected="false">Visited</button>
+              <button type="button" data-value="unvisited" role="tab" aria-selected="false">Not visited</button>
+            </div>
+          </div>
+          <div class="filter-toggle-group">
             <span class="filter-label">Sort</span>
-            <select id="filter-sort">
-              <option value="name">Name (A–Z)</option>
-              <option value="location">Location</option>
-              <option value="recent">Most recently visited</option>
-              <option value="distance">Nearest to me</option>
-            </select>
-          </label>
+            <div id="filter-sort" class="toggle toggle-fill" role="tablist" aria-label="Sort order">
+              <button type="button" data-value="name" class="active" role="tab" aria-selected="true">A–Z</button>
+              <button type="button" data-value="distance" role="tab" aria-selected="false">Nearest to me</button>
+            </div>
+          </div>
         </div>
 
         <div class="institution-filter">

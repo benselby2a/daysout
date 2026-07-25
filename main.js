@@ -139,7 +139,6 @@ const state = {
   filters: {
     search: "",
     visited: "all",
-    country: "all",
     sort: "name",
     institutions: [],
   },
@@ -160,7 +159,6 @@ const el = {
   institutionChips: document.getElementById("institution-chips"),
   filterSearch: document.getElementById("filter-search"),
   filterVisited: document.getElementById("filter-visited"),
-  filterCountry: document.getElementById("filter-country"),
   filterSort: document.getElementById("filter-sort"),
   listTab: document.getElementById("list-tab"),
   mapTab: document.getElementById("map-tab"),
@@ -223,8 +221,7 @@ function readFilterPrefs() {
     Object.assign(state.filters, {
       search: typeof saved.search === "string" ? saved.search : "",
       visited: ["all", "visited", "unvisited"].includes(saved.visited) ? saved.visited : "all",
-      country: typeof saved.country === "string" ? saved.country : "all",
-      sort: ["name", "location", "recent", "distance"].includes(saved.sort) ? saved.sort : "name",
+      sort: ["name", "distance"].includes(saved.sort) ? saved.sort : "name",
       institutions: Array.isArray(saved.institutions) ? saved.institutions : [],
     });
   } catch (_) {
@@ -424,7 +421,7 @@ async function loadData() {
 /* ── Filtering ─────────────────────── */
 
 function filteredProperties() {
-  const { search, visited, country, sort, institutions } = state.filters;
+  const { search, visited, sort, institutions } = state.filters;
   const needle = search.trim().toLowerCase();
 
   let rows = state.properties.filter((p) => {
@@ -432,7 +429,6 @@ function filteredProperties() {
       const haystack = `${p.name} ${p.location} ${p.institutions.join(" ")}`.toLowerCase();
       if (!haystack.includes(needle)) return false;
     }
-    if (country !== "all" && p.country !== country) return false;
     if (visited === "visited" && !isVisited(p)) return false;
     if (visited === "unvisited" && isVisited(p)) return false;
     // An empty institution filter means "no institution filter", and a property
@@ -446,23 +442,6 @@ function filteredProperties() {
 
   const collator = new Intl.Collator("en-GB", { sensitivity: "base" });
   rows = rows.slice().sort((a, b) => {
-    if (sort === "location") {
-      const byLocation = collator.compare(a.location || "￿", b.location || "￿");
-      if (byLocation !== 0) return byLocation;
-    }
-    if (sort === "recent") {
-      const aDate = lastVisitDate(a);
-      const bDate = lastVisitDate(b);
-      // Undated and unvisited places sort last, newest visit first.
-      if (aDate !== bDate) {
-        if (!aDate) return 1;
-        if (!bDate) return -1;
-        return bDate.localeCompare(aDate);
-      }
-      const aVisited = isVisited(a);
-      const bVisited = isVisited(b);
-      if (aVisited !== bVisited) return aVisited ? -1 : 1;
-    }
     if (sort === "distance") {
       const aDistance = distanceToProperty(a);
       const bDistance = distanceToProperty(b);
@@ -1156,34 +1135,59 @@ el.filterSearch?.addEventListener("input", (e) => {
   applyFilterChange();
 });
 
-for (const [node, key] of [
-  [el.filterVisited, "visited"],
-  [el.filterCountry, "country"],
-]) {
-  node?.addEventListener("change", (e) => {
-    state.filters[key] = e.target.value;
-    writeFilterPrefs();
-    applyFilterChange();
+// Wires a row of <button data-value="..."> as a single-select segmented
+// toggle: one "active" at a time, driven by clicks or by setValue(). Used for
+// both the Visited and Sort controls in place of a <select>.
+function wireToggleGroup(container, { onChange } = {}) {
+  const buttons = () => (container ? Array.from(container.querySelectorAll("button[data-value]")) : []);
+  container?.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-value]");
+    if (!btn || btn.classList.contains("active")) return;
+    for (const b of buttons()) {
+      const active = b === btn;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    onChange?.(btn.dataset.value);
   });
+  return {
+    setValue(value) {
+      for (const b of buttons()) {
+        const active = b.dataset.value === value;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-selected", active ? "true" : "false");
+      }
+    },
+  };
 }
 
-el.filterSort?.addEventListener("change", async (e) => {
-  state.filters.sort = e.target.value;
-  writeFilterPrefs();
-
-  if (state.filters.sort === "distance" && !state.userLocation) {
+const visitedToggle = wireToggleGroup(el.filterVisited, {
+  onChange: (value) => {
+    state.filters.visited = value;
+    writeFilterPrefs();
     applyFilterChange();
-    const position = await requestLocation();
-    if (!position) {
-      // Without a fix, "nearest to me" would just be alphabetical order wearing
-      // a misleading label, so drop back to the default sort.
-      state.filters.sort = "name";
-      el.filterSort.value = "name";
-      writeFilterPrefs();
-    }
-  }
+  },
+});
 
-  applyFilterChange();
+const sortToggle = wireToggleGroup(el.filterSort, {
+  onChange: async (value) => {
+    state.filters.sort = value;
+    writeFilterPrefs();
+
+    if (value === "distance" && !state.userLocation) {
+      applyFilterChange();
+      const position = await requestLocation();
+      if (!position) {
+        // Without a fix, "nearest to me" would just be alphabetical order wearing
+        // a misleading label, so drop back to the default sort.
+        state.filters.sort = "name";
+        sortToggle.setValue("name");
+        writeFilterPrefs();
+      }
+    }
+
+    applyFilterChange();
+  },
 });
 
 document.getElementById("refresh-location")?.addEventListener("click", async () => {
@@ -1282,9 +1286,8 @@ document.getElementById("sign-out-btn")?.addEventListener("click", async () => {
 
 function applyFiltersToInputs() {
   if (el.filterSearch) el.filterSearch.value = state.filters.search;
-  if (el.filterVisited) el.filterVisited.value = state.filters.visited;
-  if (el.filterCountry) el.filterCountry.value = state.filters.country;
-  if (el.filterSort) el.filterSort.value = state.filters.sort;
+  visitedToggle.setValue(state.filters.visited);
+  sortToggle.setValue(state.filters.sort);
 }
 
 (async function init() {

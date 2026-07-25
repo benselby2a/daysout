@@ -4,9 +4,10 @@ Track visits to historic houses and gardens around the UK — National Trust,
 English Heritage, National Trust for Scotland, Historic Environment Scotland,
 Cadw, RHS gardens and independent houses.
 
-- **List view** with filters for visited / not visited, institution, country and
-  a free-text search, plus per-institution progress
-- **Sort by distance** from where you are, using the browser's location
+- **List view** with filters for visited / not visited and institution, plus a
+  free-text search and per-institution progress
+- **Sort** alphabetically or by distance from where you are, using the
+  browser's location
 - **Map view** — a polygon map of the UK with every property plotted by
   coordinates, coloured by whether you have been
 - **Mark a place as visited**, with an optional date and notes. A place can be
