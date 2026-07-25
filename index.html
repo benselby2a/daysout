@@ -48,21 +48,17 @@
           <button id="sign-out-btn" type="button" style="font-size:0.7rem;padding:0.15rem 0.4rem;min-height:auto;cursor:pointer">Sign Out</button>
           <button id="theme-toggle-btn" type="button" aria-label="Toggle theme" style="font-size:0.7rem;padding:0.15rem 0.4rem;min-height:auto;cursor:pointer">🌙</button>
         </div>
-        <p class="kicker">Historic houses &amp; gardens</p>
         <h1>🐳 Days Out 🏰🌷</h1>
       </header>
 
-      <section class="panel" aria-labelledby="progress-heading">
+      <section class="panel" aria-labelledby="places-heading">
         <div class="panel-head">
-          <h2 id="progress-heading">Visited Properties</h2>
+          <h2 id="places-heading">Visited Properties</h2>
           <button id="open-add-property" type="button">Add Property</button>
         </div>
         <div id="progress-cards" class="progress-cards" role="radiogroup" aria-label="Filter by institution"></div>
-      </section>
 
-      <section class="panel" aria-labelledby="places-heading">
-        <div class="panel-head">
-          <h2 id="places-heading">Places</h2>
+        <div class="panel-head places-toggle-row">
           <div class="toggle" role="tablist" aria-label="View toggle">
             <button id="list-tab" class="active" data-view="list" role="tab" aria-selected="true">List</button>
             <button id="map-tab" data-view="map" role="tab" aria-selected="false">Map</button>

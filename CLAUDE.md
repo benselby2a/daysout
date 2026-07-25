@@ -79,13 +79,15 @@ again — it does not retroactively re-centre the already-open map. The default
 view is resolved once per page load and only sets the *starting* viewBox; the
 existing reset-zoom control still returns to the full UK extent.
 
-`--map-aspect` (the wrapper's width/height ratio) is **not** fixed to the full
-UK's tall/narrow shape — `applyView()` recomputes it from the *current*
-viewBox on every pan/zoom. The default local view is roughly square, and
-sizing the wrapper for the country's proportions instead would letterbox that
-square crop down to a fraction of the available width. This is the mechanism
-behind "the map fills the available width" — without it, only the *shape* of
-whatever's currently zoomed-in changes the visible framing, not the box.
+`.uk-map-svg-wrap` is simply full width, fixed height (`min(80vh, 900px)`,
+`min(65vh, 620px)` on mobile) — an earlier attempt made the wrapper's
+width/height ratio track the current viewBox (`--map-aspect`, recomputed on
+every pan/zoom) so the box shape matched whatever was zoomed in, but that
+didn't visibly widen the map and was dropped in favour of this simpler fix.
+The `<svg>`'s own `preserveAspectRatio="xMidYMid meet"` centres the UK inside
+the fixed box and pads the rest with `--map-sea`, so a zoomed-out or
+near-square crop just gets letterboxed by the sea colour rather than shrinking
+the box to match — that letterboxing is intentional, not a bug.
 
 Pinch-zoom and double-tap-to-zoom are hand-rolled on top of Pointer Events in
 `wireMapInteractions()` (there's no touch-gesture library) — `setPointerCapture`
@@ -104,21 +106,51 @@ pointer retargets the resulting `click`'s `e.target` to the `<svg>` itself
 rather than the marker — silently breaking `e.target.classList.contains(...)`
 checks in a click handler. Selection is instead resolved inside the same
 pointerup-based tap detection used for double-tap-zoom (see `tapCandidate` and
-`selectMarkerCluster()`), which reads `e.target` at pointerdown time before
+`selectMarkerByIds()`), which reads `e.target` at pointerdown time before
 capture can interfere. This one is easy to reintroduce — if marker clicks ever
 stop selecting, check here first before assuming the DOM markup broke.
 
-A tap doesn't just select whatever marker `e.target` was — `selectMarkerCluster()`
-also gathers every *other* marker within `MAP_CLUSTER_RADIUS_PX` screen pixels
-of the tap point (converted to the current viewBox's units, so "close" always
-means close on screen regardless of zoom) into `state.selectedPropertyIds`,
-ordered nearest-first. The selection card becomes a small carousel
+Markers that overlap on screen are merged into one bigger numbered icon rather
+than left to stack invisibly or picked arbitrarily on tap. `drawMapMarkers()`
+recomputes this from scratch on every render **and** on every zoom step (via
+`applyView()`), converting `MAP_CLUSTER_MERGE_PX` (24 screen px) into current
+viewBox units and grouping points with `clusterPoints()` (greedy
+single-linkage). Each marker/cluster carries `data-property-ids` — always a
+comma-separated list, even for a single property — instead of a singular id,
+so pointer handlers use `.closest(".map-marker, .map-marker-cluster")` and
+split that attribute rather than reading a per-element id. Zooming in enough
+that two markers no longer overlap makes them un-cluster on the very next
+`drawMapMarkers()` call, since membership is recomputed from actual on-screen
+distance, not cached. `selectMarkerByIds()` just applies the tapped element's
+id list to `state.selectedPropertyIds` — no separate proximity search is
+needed at tap time, since the cluster grouping already did that work when the
+marker was drawn. The selection card becomes a small carousel
 (`data-cluster-nav="prev"/"next"`, `state.selectedCardIndex`) whenever that
-list has more than one entry — real UK property data clusters densely enough
-(e.g. Alnwick Castle and The Alnwick Garden) that this isn't a rare edge case
-at full-UK zoom. The card also has a `data-action="close-map-selection"` × in
-the corner, handled by the same delegated click listener as the list's
-mark-visited/edit buttons.
+list has more than one entry. The card also has a
+`data-action="close-map-selection"` × in the corner, handled by the same
+delegated click listener as the list's mark-visited/edit buttons — that
+handler clears both `.map-marker.active` and `.map-marker-cluster.active`.
+
+Marker fill colour is set inline per-element (`markerFillColor()`), not
+through a CSS class, since it depends on the specific property's institution:
+visited renders in that institution's full colour (`institutionColour()`,
+resolved from the same `--inst-*` CSS custom properties as the filter chips),
+unvisited renders as `color-mix(in srgb, <colour> 38%, var(--map-sea))` — a
+lighter tint of the *same* hue rather than a generic grey, so colour alone
+still identifies the institution either way (verified working as both a
+`fill` attribute and inline style on SVG elements, including with a `var()`
+operand, in Chromium). A mixed-institution cluster falls back to `--muted`
+rather than picking one member's colour arbitrarily; a cluster only renders as
+"visited" shade once *every* member has been visited, not just one. Because
+colour is now set inline, the old `.map-marker.visited`/`.unvisited` CSS rules
+were removed entirely — reintroducing class-based fill rules would silently
+override the inline colour via CSS cascade.
+
+Markers have no `<title>` child and rely only on `aria-label` plus the custom
+`.uk-map-tooltip` — that tooltip is built from a `pointermove` handler
+matching `.closest(".map-marker, .map-marker-cluster")`, showing a name/
+location/visited-status card for a single property or "N properties here" for
+a cluster.
 
 ## Verifying changes
 
@@ -134,15 +166,16 @@ A synthetic event's `e.target` is fixed to whatever element `dispatchEvent()`
 was called on, unlike a real pointer event (which the browser hit-tests at
 the given coordinates) — dispatching on the `<svg>` root to simulate a marker
 tap silently tests nothing, since `e.target` never becomes a `.map-marker`.
-Dispatch on the marker element itself. To exercise clustering deliberately,
-sample every marker's `cx`/`cy` and pick the closest real pair rather than
-guessing a screen coordinate — this dataset already has genuine near-duplicates
-(e.g. Alnwick Castle / The Alnwick Garden) worth targeting directly. Worth
-exercising after UI changes: the list filters, the progress cards' dual role
-as the institution filter (picking one, picking "All places" to clear, the
-`aria-checked`/`role="radio"` state), the map (marker count should match the
-filtered rows, the default zoom framing shouldn't be confused with a full-UK
-view when clicking a marker by id, and `--map-aspect` should differ visibly
-between the default and full-UK views), mark-visited, add/edit property, the
-duplicate-name and half-coordinate validations, and both light and dark
-themes.
+Dispatch on the marker element itself — for a cluster, dispatch on the
+`.map-marker-cluster` `<g>`, not a nested `<circle>`/`<text>`, since
+`data-property-ids` lives on the group. Worth exercising after UI changes: the
+list filters, the progress cards' dual role as the institution filter (picking
+one, picking "All places" to clear, the `aria-checked`/`role="radio"` state),
+the map (marker count should match the filtered rows, the default zoom framing
+shouldn't be confused with a full-UK view when selecting a marker by id,
+clusters should show the right count and un-merge into individual markers on
+zoom-in, hovering a marker/cluster should show only the custom tooltip and
+never a native one, and marker colour should track the property's institution
+with unvisited noticeably lighter than visited), mark-visited, add/edit
+property, the duplicate-name and half-coordinate validations, and both light
+and dark themes.

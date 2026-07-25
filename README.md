@@ -10,12 +10,15 @@ Cadw, RHS gardens and independent houses.
   the institution filter — click one to narrow the list to it, click again
   (or click "All places") to clear
 - **Map view** — a polygon map of the UK with every property plotted by
-  coordinates, coloured by whether you have been. Opens immediately (it never
-  waits on a location fix) zoomed to the 50 miles around your location if
+  coordinates, coloured by institution (visited in that institution's colour,
+  not visited in a lighter tint of the same colour). Opens immediately (it
+  never waits on a location fix) zoomed to the 50 miles around your location if
   already known, or London otherwise, with pinch, double-tap/double-click,
   scroll, and on-screen +/− controls to zoom, and drag to pan. Markers close
-  enough together to overlap open as a small carousel card instead of picking
-  one arbitrarily
+  enough together to visually overlap merge into one bigger numbered icon;
+  zooming in until they're no longer touching splits them back into individual
+  markers. Tapping either opens a selection card — a small carousel when more
+  than one property is involved — with a × to close it
 - **Mark a place as visited**, with an optional date and notes. A place can be
   visited more than once, and "visited, no idea when" is a valid entry
 - **Add your own properties**, capturing name, location, institution(s),

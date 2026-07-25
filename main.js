@@ -581,8 +581,6 @@ function projectAlbers(lon, lat) {
 const MAP_WIDTH = 620;
 const MAP_PADDING = 12;
 const MAP_MARKER_RADIUS = 10;
-// On-screen pixels within which a tap counts multiple markers as one cluster.
-const MAP_CLUSTER_RADIUS_PX = 24;
 let mapTransform = null;
 let currentMapZoom = 1;
 
@@ -706,6 +704,107 @@ function mappableProperties(rows) {
   return rows.filter((p) => typeof p.latitude === "number" && typeof p.longitude === "number");
 }
 
+// Two markers within this many screen pixels of each other merge into one
+// cluster icon, regardless of the current zoom level — converted to the
+// current viewBox's units in drawMapMarkers() since "close" has to mean
+// close on screen, not a fixed map distance.
+const MAP_CLUSTER_MERGE_PX = 24;
+
+// Greedy single-linkage grouping: starts a cluster from any ungrouped point,
+// then keeps absorbing remaining points within radius of *anything* already
+// in it. Simple and O(n^2)-ish, which is fine at this data's size (a few
+// hundred points); real property data doesn't chain into long lines the way
+// a pathological input could, so single-linkage's usual failure mode isn't a
+// practical concern here.
+function clusterPoints(points, radiusSvgUnits) {
+  const clusters = [];
+  const assigned = new Set();
+  for (const point of points) {
+    if (assigned.has(point)) continue;
+    const cluster = [point];
+    assigned.add(point);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const other of points) {
+        if (assigned.has(other)) continue;
+        if (cluster.some((m) => Math.hypot(m.x - other.x, m.y - other.y) <= radiusSvgUnits)) {
+          cluster.push(other);
+          assigned.add(other);
+          grew = true;
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
+// Visited = the institution's own colour; not visited = a lighter tint of
+// that same hue (blended toward the map's background) rather than a
+// generic grey, so colour alone still identifies the institution either way.
+function markerFillColor(baseColor, visited) {
+  return visited ? baseColor : `color-mix(in srgb, ${baseColor} 38%, var(--map-sea))`;
+}
+
+// Renders every currently-filtered, mappable property as a marker, merging
+// any close enough on screen to visually overlap into one bigger "cluster"
+// icon with a count. Recomputed on every call (including every zoom step,
+// from applyView()) since which markers count as "close" is a screen-pixel
+// question that changes continuously with zoom.
+function drawMapMarkers(svg) {
+  const markersGroup = svg.querySelector(".map-markers");
+  if (!markersGroup) return 0;
+
+  const rows = filteredProperties();
+  const plotted = mappableProperties(rows);
+
+  const rect = svg.getBoundingClientRect();
+  const currentViewWidth = mapTransform.width / currentMapZoom;
+  const pxPerSvgUnit = rect.width > 0 ? rect.width / currentViewWidth : 0;
+  const radiusSvgUnits = pxPerSvgUnit > 0 ? MAP_CLUSTER_MERGE_PX / pxPerSvgUnit : 0;
+
+  const points = plotted.map((p) => {
+    const [x, y] = projectToMap(p.longitude, p.latitude);
+    return { property: p, x, y };
+  });
+  const clusters = clusterPoints(points, radiusSvgUnits);
+  const selectedId = state.selectedPropertyIds[state.selectedCardIndex];
+
+  markersGroup.innerHTML = clusters
+    .map((cluster) => {
+      if (cluster.length === 1) {
+        const { property: p, x, y } = cluster[0];
+        const active = selectedId === p.id;
+        const r = MAP_MARKER_RADIUS / currentMapZoom;
+        const fill = markerFillColor(institutionColour(p.institutions[0]), isVisited(p));
+        return `<circle class="map-marker${active ? " active" : ""}"
+          cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="${fill}"
+          data-property-ids="${p.id}" aria-label="${escapeHtml(p.name)}"></circle>`;
+      }
+
+      const cx = cluster.reduce((sum, m) => sum + m.x, 0) / cluster.length;
+      const cy = cluster.reduce((sum, m) => sum + m.y, 0) / cluster.length;
+      const ids = cluster.map((m) => m.property.id);
+      const active = ids.includes(selectedId);
+      const r = (MAP_MARKER_RADIUS * 1.6) / currentMapZoom;
+      const fontSize = (MAP_MARKER_RADIUS * 1.15) / currentMapZoom;
+      // A cluster all of one institution keeps that colour; a mixed cluster
+      // falls back to a neutral tone rather than picking one arbitrarily.
+      const bases = new Set(cluster.map((m) => institutionColour(m.property.institutions[0])));
+      const baseColor = bases.size === 1 ? [...bases][0] : cssColour("--muted");
+      const allVisited = cluster.every((m) => isVisited(m.property));
+      const fill = markerFillColor(baseColor, allVisited);
+      return `<g class="map-marker-cluster${active ? " active" : ""}" data-property-ids="${ids.join(",")}" aria-label="${cluster.length} properties here">
+        <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(2)}" fill="${fill}"></circle>
+        <text x="${cx.toFixed(1)}" y="${cy.toFixed(1)}" font-size="${fontSize.toFixed(2)}">${cluster.length}</text>
+      </g>`;
+    })
+    .join("");
+
+  return rows.length - plotted.length;
+}
+
 function renderMap() {
   if (!el.ukMap) return;
   if (!state.mapFeatures) {
@@ -713,10 +812,6 @@ function renderMap() {
     ensureUkMapLoaded();
     return;
   }
-
-  const rows = filteredProperties();
-  const plotted = mappableProperties(rows);
-  const missing = rows.length - plotted.length;
 
   // Build the shell once, then only refresh the markers on later renders — the
   // nation outlines never change and re-serialising them on every filter change
@@ -733,7 +828,7 @@ function renderMap() {
       .join("");
 
     el.ukMap.innerHTML = `
-      <div class="uk-map-svg-wrap" style="--map-aspect:${(mapTransform.width / mapTransform.height).toFixed(4)}">
+      <div class="uk-map-svg-wrap">
         <div class="map-zoom-controls">
           <button type="button" data-map-zoom="in" aria-label="Zoom in">+</button>
           <button type="button" data-map-zoom="out" aria-label="Zoom out">−</button>
@@ -757,8 +852,9 @@ function renderMap() {
         <div class="map-selected"></div>
       </div>
       <div class="map-legend-bar">
-        <span class="map-legend-item"><span class="map-legend-dot" style="background:var(--map-visited)"></span> Visited</span>
-        <span class="map-legend-item"><span class="map-legend-dot" style="background:var(--map-unvisited)"></span> Not visited</span>
+        <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-visited"></span> Visited (darker)</span>
+        <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-unvisited"></span> Not visited (lighter)</span>
+        <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-cluster">3</span> Places close together</span>
         <span class="map-center-note"></span>
       </div>
       <div class="map-no-coords hidden"></div>`;
@@ -774,17 +870,7 @@ function renderMap() {
     }
   }
 
-  const markersGroup = svg.querySelector(".map-markers");
-  markersGroup.innerHTML = plotted
-    .map((p) => {
-      const [x, y] = projectToMap(p.longitude, p.latitude);
-      const visited = isVisited(p);
-      const active = state.selectedPropertyIds[state.selectedCardIndex] === p.id;
-      return `<circle class="map-marker ${visited ? "visited" : "unvisited"}${active ? " active" : ""}"
-        cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(MAP_MARKER_RADIUS / currentMapZoom).toFixed(2)}"
-        data-property-id="${p.id}"><title>${escapeHtml(p.name)}</title></circle>`;
-    })
-    .join("");
+  const missing = drawMapMarkers(svg);
 
   const noCoords = el.ukMap.querySelector(".map-no-coords");
   if (noCoords) {
@@ -844,13 +930,12 @@ function wireMapInteractions(svg) {
     // is also read by renderMap() so markers inserted later (after a filter
     // change) come in at the right size instead of momentarily full-size.
     currentMapZoom = baseView.w / view.w;
-    svg.querySelectorAll(".map-marker").forEach((node) => node.setAttribute("r", (MAP_MARKER_RADIUS / currentMapZoom).toFixed(2)));
-    // The wrapper's own box shape tracks whatever's currently in view rather
-    // than staying fixed to the full UK's tall/narrow silhouette — the default
-    // local view is roughly square, and sizing the wrapper for the *country's*
-    // proportions would letterbox it down to a fraction of the available
-    // width. Panning/zooming back out to the whole UK reshapes it back.
-    wrap.style.setProperty("--map-aspect", (view.w / view.h).toFixed(4));
+    // Clusters are zoom-dependent (whether two markers are "close enough to
+    // merge" is a screen-pixel question), so every zoom step needs to redraw,
+    // not just filter-driven renders. Panning alone doesn't change on-screen
+    // separation between markers, but redrawing on every applyView() call is
+    // still cheap enough at this data size not to bother special-casing it.
+    drawMapMarkers(svg);
   }
 
   function clampView() {
@@ -948,11 +1033,11 @@ function wireMapInteractions(svg) {
     // Capturing the pointer (above) retargets the subsequent native "click"
     // event's target to this svg element rather than the marker actually
     // pressed, so marker selection can't rely on that click event — the
-    // property id is captured here instead, at the one point e.target is
+    // property id(s) are captured here instead, at the one point e.target is
     // still trustworthy, and resolved on pointerup below.
-    const isMarker = e.target.classList.contains("map-marker");
-    tapCandidate = { x: e.clientX, y: e.clientY, t: performance.now(), propertyId: isMarker ? Number(e.target.dataset.propertyId) : null };
-    if (isMarker) return;
+    const hit = e.target.closest(".map-marker, .map-marker-cluster");
+    tapCandidate = { x: e.clientX, y: e.clientY, t: performance.now(), propertyIds: hit ? hit.dataset.propertyIds.split(",").map(Number) : null };
+    if (hit) return;
     dragState = { startX: e.clientX, startY: e.clientY, viewX: view.x, viewY: view.y };
   });
 
@@ -980,18 +1065,26 @@ function wireMapInteractions(svg) {
       }
       return;
     }
-    if (!e.target.classList.contains("map-marker")) {
+    const hovered = e.target.closest(".map-marker, .map-marker-cluster");
+    if (!hovered) {
       tip.hidden = true;
       return;
     }
-    const property = state.properties.find((p) => p.id === Number(e.target.dataset.propertyId));
-    if (!property) return;
     const wrapRect = wrap.getBoundingClientRect();
-    const location = [property.location, property.country].filter(Boolean).join(", ");
-    const visits = visitsFor(property.id);
-    const sub = visits.length ? `Visited ${formatVisitDate(lastVisitDate(property))}` : "Not visited";
-    const locationLine = [location, propertyTypeLabel(property)].filter(Boolean).join(" · ");
-    tip.innerHTML = `${escapeHtml(property.name)}<span class="tooltip-sub">${escapeHtml(locationLine)}</span><span class="tooltip-sub">${escapeHtml(sub)}</span>`;
+    const ids = hovered.dataset.propertyIds.split(",").map(Number);
+    let html;
+    if (ids.length > 1) {
+      html = `${ids.length} properties here<span class="tooltip-sub">Tap to see them all</span>`;
+    } else {
+      const property = state.properties.find((p) => p.id === ids[0]);
+      if (!property) return;
+      const location = [property.location, property.country].filter(Boolean).join(", ");
+      const visits = visitsFor(property.id);
+      const sub = visits.length ? `Visited ${formatVisitDate(lastVisitDate(property))}` : "Not visited";
+      const locationLine = [location, propertyTypeLabel(property)].filter(Boolean).join(" · ");
+      html = `${escapeHtml(property.name)}<span class="tooltip-sub">${escapeHtml(locationLine)}</span><span class="tooltip-sub">${escapeHtml(sub)}</span>`;
+    }
+    tip.innerHTML = html;
     tip.style.left = `${e.clientX - wrapRect.left}px`;
     tip.style.top = `${e.clientY - wrapRect.top}px`;
     tip.hidden = false;
@@ -1017,11 +1110,10 @@ function wireMapInteractions(svg) {
       const now = performance.now();
       const moved = Math.hypot(e.clientX - tapCandidate.x, e.clientY - tapCandidate.y);
       if (moved <= TAP_MAX_MOVEMENT_PX) {
-        if (tapCandidate.propertyId !== null) {
+        if (tapCandidate.propertyIds) {
           // No duration limit here — a slow, deliberate press on a marker
           // should still select it, unlike the double-tap-zoom gesture below.
-          const [svgX, svgY] = toSvgPointXY(tapCandidate.x, tapCandidate.y);
-          selectMarkerCluster(svgX, svgY);
+          selectMarkerByIds(tapCandidate.propertyIds);
         } else if (now - tapCandidate.t <= TAP_MAX_DURATION_MS) {
           const isDoubleTap =
             lastTap &&
@@ -1044,27 +1136,14 @@ function wireMapInteractions(svg) {
   svg.addEventListener("pointercancel", endPointer);
   svg.addEventListener("pointerleave", () => { tip.hidden = true; });
 
-  // Several markers can sit close enough on screen that a tap can't cleanly
-  // land on just one, especially once zoomed out — gathers every marker
-  // within a fixed on-screen radius of the tap (converted to the current
-  // viewBox's units so "close" means close on screen at any zoom level),
-  // closest first, so the selection card can page through all of them.
-  function selectMarkerCluster(svgX, svgY) {
-    const rect = svg.getBoundingClientRect();
-    const radiusSvgUnits = MAP_CLUSTER_RADIUS_PX * (view.w / rect.width);
-    const nearby = mappableProperties(filteredProperties())
-      .map((p) => {
-        const [x, y] = projectToMap(p.longitude, p.latitude);
-        return { id: p.id, dist: Math.hypot(x - svgX, y - svgY) };
-      })
-      .filter((m) => m.dist <= radiusSvgUnits)
-      .sort((a, b) => a.dist - b.dist)
-      .map((m) => m.id);
-
-    state.selectedPropertyIds = nearby;
+  // The tapped marker or cluster already carries the exact property id list
+  // (computed by drawMapMarkers from actual on-screen overlap), so selection
+  // just applies it and redraws to pick up the new "active" highlight —
+  // no separate proximity search needed at tap time.
+  function selectMarkerByIds(ids) {
+    state.selectedPropertyIds = ids;
     state.selectedCardIndex = 0;
-    svg.querySelectorAll(".map-marker.active").forEach((n) => n.classList.remove("active"));
-    if (nearby[0] !== undefined) svg.querySelector(`.map-marker[data-property-id="${nearby[0]}"]`)?.classList.add("active");
+    drawMapMarkers(svg);
     renderMapSelection();
   }
 }
@@ -1390,7 +1469,7 @@ document.addEventListener("click", (e) => {
   if (action === "close-map-selection") {
     state.selectedPropertyIds = [];
     state.selectedCardIndex = 0;
-    document.querySelectorAll(".map-marker.active").forEach((n) => n.classList.remove("active"));
+    document.querySelectorAll(".map-marker.active, .map-marker-cluster.active").forEach((n) => n.classList.remove("active"));
     renderMapSelection();
     return;
   }

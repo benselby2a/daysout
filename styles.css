@@ -35,8 +35,6 @@
   --map-land: #e4ebe6;
   --map-land-stroke: #a9b8b0;
   --map-sea: #eaf1f7;
-  --map-visited: #16a34a;
-  --map-unvisited: #94a3b8;
 
   --inst-nt: #2f7d51;
   --inst-nts: #2f6d9e;
@@ -80,8 +78,6 @@
   --map-land: #262b35;
   --map-land-stroke: #3d4552;
   --map-sea: #141822;
-  --map-visited: #4ade80;
-  --map-unvisited: #64748b;
 
   --inst-nt: #56b984;
   --inst-nts: #63a6d8;
@@ -173,15 +169,6 @@ h1, h2, h3, h4, p { margin: 0; }
   line-height: 1.15;
 }
 
-.kicker {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--accent);
-  font-weight: 600;
-  font-size: 0.78rem;
-}
-
 /* ── Panel ─────────────────────────── */
 
 .panel {
@@ -209,6 +196,14 @@ h1, h2, h3, h4, p { margin: 0; }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 6px;
+}
+
+/* The List/Map toggle row, now living in the same panel as the progress
+   cards above it rather than a separate section. */
+.places-toggle-row {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
 }
 
 /* Each card is a button that also filters the list below by that
@@ -593,14 +588,12 @@ button.ghost {
 
 /* ── Map ───────────────────────────── */
 
-/* Sized from --map-aspect (width/height of whatever is currently in view)
-   rather than filling the panel width outright, which would letterbox the
-   content inside a band of empty sea whenever the shown crop is narrower
-   than the panel. applyView() keeps --map-aspect in sync with the live
-   viewBox on every pan/zoom, so a roughly-square local crop actually claims
-   most of the panel's width, and zooming back out to the tall/narrow full UK
-   reshapes the box to match. There is no side column — the legend is a slim
-   bar below the map instead — so this can also claim most of the height. */
+/* Always fills the panel's width — the SVG's own preserveAspectRatio="xMidYMid
+   meet" centres the UK inside that box and pads the rest with --map-sea, so a
+   view that's narrower than the box (the whole country zoomed out, or a
+   near-square local crop) just gets letterboxed by the sea colour rather than
+   shrinking the box down to match. There is no side column — the legend is a
+   slim bar below the map instead. */
 .uk-map-svg-wrap {
   margin-top: 10px;
   border: 1px solid var(--line);
@@ -613,15 +606,14 @@ button.ghost {
      wireMapInteractions() — dragging to pan must never read as a
      text-selection drag once the cursor strays outside the map. */
   user-select: none;
-  width: min(100%, calc(88vh * var(--map-aspect, 0.55)));
-  margin-left: auto;
-  margin-right: auto;
+  width: 100%;
+  height: min(80vh, 900px);
 }
 
 .uk-map-svg {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   cursor: grab;
 }
 
@@ -634,6 +626,9 @@ button.ghost {
   stroke-linejoin: round;
 }
 
+/* Fill is set per-element inline (institution colour, lighter for
+   not-visited) rather than through a class, since it depends on which
+   institution the specific property belongs to. */
 .map-marker {
   stroke: var(--card);
   stroke-width: 1;
@@ -641,10 +636,29 @@ button.ghost {
   transition: r 120ms ease;
 }
 
-.map-marker.visited { fill: var(--map-visited); }
-.map-marker.unvisited { fill: var(--map-unvisited); }
 .map-marker:hover { stroke: var(--text); stroke-width: 1.4; }
 .map-marker.active { stroke: var(--text); stroke-width: 1.8; }
+
+.map-marker-cluster {
+  cursor: pointer;
+}
+
+.map-marker-cluster circle {
+  stroke: var(--card);
+  stroke-width: 1.5;
+  transition: r 120ms ease;
+}
+
+.map-marker-cluster:hover circle { stroke: var(--text); stroke-width: 2; }
+.map-marker-cluster.active circle { stroke: var(--text); stroke-width: 2.4; }
+
+.map-marker-cluster text {
+  fill: #fff;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
 
 .uk-map-tooltip {
   position: absolute;
@@ -694,6 +708,26 @@ button.ghost {
   height: 9px;
   border-radius: 50%;
   flex: none;
+}
+
+/* Markers are coloured per-institution (see markerFillColor() in main.js),
+   so the legend demonstrates the shade rule with a neutral colour rather
+   than tying it to one specific institution's hue. */
+.map-legend-dot-visited { background: var(--muted); }
+.map-legend-dot-unvisited { background: color-mix(in srgb, var(--muted) 38%, var(--map-sea)); }
+
+.map-legend-dot-cluster {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--muted);
+  color: var(--card);
+  font-size: 0.62rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .map-center-note {
@@ -962,7 +996,7 @@ button.ghost {
 /* ── Responsive ────────────────────── */
 
 @media (max-width: 900px) {
-  .uk-map-svg-wrap { width: min(100%, calc(74vh * var(--map-aspect, 0.55))); }
+  .uk-map-svg-wrap { height: min(65vh, 620px); }
 }
 
 @media (max-width: 700px) {
