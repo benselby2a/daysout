@@ -41,7 +41,7 @@
   --inst-eh: #a8323d;
   --inst-hes: #5b4b9e;
   --inst-cadw: #c2711a;
-  --inst-rhs: #b5117a;
+  --inst-rhs: #e0399f;
   --inst-rhsp: #d4589e;
   --inst-hh: #8e3fae;
 }
@@ -84,7 +84,7 @@
   --inst-eh: #e2717c;
   --inst-hes: #9b8bdd;
   --inst-cadw: #e0a05a;
-  --inst-rhs: #ec5cb0;
+  --inst-rhs: #f27ec5;
   --inst-rhsp: #f08cc4;
   --inst-hh: #c98ee0;
 }
@@ -692,6 +692,26 @@ button.ghost {
   stroke: var(--card);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
+}
+
+/* Background city landmarks — muted and non-interactive so they read as
+   orientation context, never mistaken for a property or the location
+   marker. */
+.map-cities {
+  pointer-events: none;
+}
+
+.map-city circle {
+  fill: var(--muted);
+  opacity: 0.55;
+}
+
+.map-city text {
+  fill: var(--muted);
+  font-weight: 600;
+  text-anchor: middle;
+  opacity: 0.7;
+  user-select: none;
 }
 
 .uk-map-tooltip {

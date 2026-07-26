@@ -201,6 +201,15 @@ one. Because colour is set inline, the old `.map-marker.visited`/`.unvisited`
 CSS rules were removed entirely — reintroducing class-based fill rules would
 silently override the inline colour via CSS cascade.
 
+The map also carries a fixed set of ~20 major UK cities (`UK_CITIES`,
+`drawCityLabels()`) as muted, non-interactive background landmarks — spread
+across all four nations rather than clustered in England (which has more big
+cities), purely so the map reads at a glance even zoomed out. They live in
+their own `.map-cities` group between the nation outlines and the property
+markers, are never counted in `clusterPointsNoOverlap()`, and use the same
+constant-on-screen-size approach (dividing by `currentMapZoom`) as everything
+else on the map.
+
 Markers have no `<title>` child and rely only on `aria-label` plus the custom
 `.uk-map-tooltip` — that tooltip is built from a `pointermove` handler
 matching `.closest(".map-marker, .map-marker-cluster")`, showing a name/

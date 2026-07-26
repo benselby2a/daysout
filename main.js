@@ -847,6 +847,53 @@ function drawMapMarkers(svg) {
   return rows.length - plotted.length;
 }
 
+// Major cities shown as background landmarks purely for orientation — not
+// selectable, not properties, never clustered with them. Roughly evenly
+// spread across all four nations (rather than clustering in England, which
+// has more big cities) so the map still reads as a UK-wide picture at a
+// glance, even zoomed out.
+const UK_CITIES = [
+  { name: "London", latitude: 51.5074, longitude: -0.1278 },
+  { name: "Birmingham", latitude: 52.4862, longitude: -1.8904 },
+  { name: "Manchester", latitude: 53.4808, longitude: -2.2426 },
+  { name: "Leeds", latitude: 53.8008, longitude: -1.5491 },
+  { name: "Liverpool", latitude: 53.4084, longitude: -2.9916 },
+  { name: "Newcastle upon Tyne", latitude: 54.9783, longitude: -1.6178 },
+  { name: "Sheffield", latitude: 53.3811, longitude: -1.4701 },
+  { name: "Bristol", latitude: 51.4545, longitude: -2.5879 },
+  { name: "Nottingham", latitude: 52.9548, longitude: -1.1581 },
+  { name: "Leicester", latitude: 52.6369, longitude: -1.1398 },
+  { name: "Edinburgh", latitude: 55.9533, longitude: -3.1883 },
+  { name: "Glasgow", latitude: 55.8642, longitude: -4.2518 },
+  { name: "Aberdeen", latitude: 57.1497, longitude: -2.0943 },
+  { name: "Dundee", latitude: 56.462, longitude: -2.9707 },
+  { name: "Inverness", latitude: 57.4778, longitude: -4.2247 },
+  { name: "Cardiff", latitude: 51.4816, longitude: -3.1791 },
+  { name: "Swansea", latitude: 51.6214, longitude: -3.9436 },
+  { name: "Newport", latitude: 51.5842, longitude: -2.9977 },
+  { name: "Belfast", latitude: 54.5973, longitude: -5.9301 },
+  { name: "Derry~Londonderry", latitude: 54.9966, longitude: -7.3086 },
+];
+
+// Small muted dot + label per city, always redrawn alongside the property
+// markers so the label/dot stay a constant on-screen size regardless of
+// zoom — same approach as drawLocationMarker(). Purely decorative context:
+// no data-property-ids, no pointer handling, never counted in clusters.
+function drawCityLabels(svg) {
+  const group = svg.querySelector(".map-cities");
+  if (!group) return;
+  const r = 3 / currentMapZoom;
+  const labelGap = 5 / currentMapZoom;
+  const fontSize = 9 / currentMapZoom;
+  group.innerHTML = UK_CITIES.map((city) => {
+    const [x, y] = projectToMap(city.longitude, city.latitude);
+    return `<g class="map-city">
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}"></circle>
+      <text x="${x.toFixed(1)}" y="${(y - r - labelGap).toFixed(1)}" font-size="${fontSize.toFixed(2)}">${escapeHtml(city.name.replace("~", "/"))}</text>
+    </g>`;
+  }).join("");
+}
+
 // A simple house pictogram (roof + body) in a local -10..10 coordinate
 // space, scaled/positioned via a transform so it can share the same
 // constant-on-screen-size approach as the property markers.
@@ -919,6 +966,7 @@ function renderMap() {
         </div>
         <svg class="uk-map-svg" viewBox="0 0 ${mapTransform.width} ${mapTransform.height.toFixed(1)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of visited properties across the UK">
           <g class="map-nations">${nations}</g>
+          <g class="map-cities"></g>
           <g class="map-markers"></g>
           <g class="map-location-marker"></g>
         </svg>
@@ -938,6 +986,7 @@ function renderMap() {
 
   const missing = drawMapMarkers(svg);
   drawLocationMarker(svg);
+  drawCityLabels(svg);
 
   const noCoords = el.ukMap.querySelector(".map-no-coords");
   if (noCoords) {
@@ -1004,6 +1053,7 @@ function wireMapInteractions(svg) {
     // still cheap enough at this data size not to bother special-casing it.
     drawMapMarkers(svg);
     drawLocationMarker(svg);
+    drawCityLabels(svg);
   }
 
   // The old /12 floor (city-region scale at best) wasn't deep enough to ever
