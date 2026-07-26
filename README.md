@@ -38,7 +38,7 @@ In the Supabase SQL editor, run the SQL in:
 - `supabase.sql`
 
 That creates the `daysout` schema (a `properties` table and a `visits` table),
-sets up row level security, and seeds 313 starter properties.
+sets up row level security, and seeds 350 starter properties.
 
 Then, in **Project Settings > API > Exposed schemas**, add `daysout` so
 PostgREST can see it. Without this the app loads but every query fails.
@@ -74,7 +74,7 @@ your data.
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` at the top of `main.js` currently point
   at the same Supabase project as the other apps, using a separate `daysout`
   schema to keep the tables apart. Change them if you want a different project.
-- **Seed data caveats.** The 313 starter properties are a hand-built list, not an
+- **Seed data caveats.** The 350 starter properties are a hand-built list, not an
   official export — the primary sources (historichouses.org, rhs.org.uk,
   Wikipedia) block direct fetches from this environment, so the Historic Houses
   and RHS Partner Garden entries in particular were compiled from web search
