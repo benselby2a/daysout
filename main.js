@@ -1282,7 +1282,12 @@ function wireMapInteractions(svg) {
     // still trustworthy, and resolved on pointerup below.
     const hit = e.target.closest(".map-marker, .map-marker-cluster");
     tapCandidate = { x: e.clientX, y: e.clientY, t: performance.now(), propertyIds: hit ? hit.dataset.propertyIds.split(",").map(Number) : null };
-    if (hit) return;
+    // Track a potential drag even when the press started on a marker —
+    // returning early here (an earlier version) meant a drag that happened
+    // to start on top of a marker never panned at all, since pointermove's
+    // panning is gated on dragState being set. A genuine tap still resolves
+    // via tapCandidate in endPointer below; this only matters once the
+    // finger actually moves past TAP_MAX_MOVEMENT_PX.
     dragState = { startX: e.clientX, startY: e.clientY, viewX: view.x, viewY: view.y };
   });
 

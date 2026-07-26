@@ -143,6 +143,20 @@ pointerup-based tap detection used for double-tap-zoom (see `tapCandidate` and
 capture can interfere. This one is easy to reintroduce — if marker clicks ever
 stop selecting, check here first before assuming the DOM markup broke.
 
+`dragState` is set on every pointerdown, including one that lands on a marker
+or cluster — not just when `e.target.closest(".map-marker, .map-marker-cluster")`
+comes back empty. An earlier version returned early in that case (reasoning
+that a marker press should only ever be a tap), which meant a drag that
+happened to *start* on top of a marker never panned at all, since
+pointermove's panning is gated on `dragState`. That was hard to notice on
+desktop with small, precise mouse targeting, but became a real bug once
+markers grew to a ~32px tap target (see the marker-sizing section above) —
+on a phone, a pan gesture starting on or near a marker is common, not an edge
+case. `tapCandidate` still resolves a genuine tap correctly regardless
+(pointermove nulls it out once movement exceeds `TAP_MAX_MOVEMENT_PX`, before
+`dragState`'s pan math ever runs on that same event), so this doesn't
+reintroduce spurious selection during a real drag.
+
 Markers that overlap on screen are merged into one bigger numbered icon rather
 than left to stack invisibly, overlap, or get picked arbitrarily on tap.
 `drawMapMarkers()` recomputes this from scratch on every render **and** every
