@@ -567,9 +567,27 @@ function projectAlbers(lon, lat) {
 
 const MAP_WIDTH = 620;
 const MAP_PADDING = 12;
-const MAP_MARKER_RADIUS = 10;
+// A screen-pixel target, not a fixed SVG-unit size — see currentPxPerSvgUnit
+// below for why that distinction matters. 16px radius (~32px diameter) is
+// a deliberate jump from an earlier 10-unit value that rendered as little as
+// ~8px across on a phone (well under Apple's ~44px touch-target guidance) —
+// still short of that guidance, but a large, tap-friendly improvement
+// without making desktop markers absurd.
+const MAP_MARKER_RADIUS = 16;
 let mapTransform = null;
-let currentMapZoom = 1;
+// The map's viewBox spans a fixed number of SVG units (mapTransform.width)
+// stretched to fill however many actual CSS pixels the wrapper currently
+// has — a wide desktop window and a narrow phone screen render the *same*
+// SVG-unit radius at very different physical sizes. Tracking pixels-per-
+// SVG-unit (updated in applyView(), which already measures the wrapper's
+// rendered width) lets every marker/label size itself as a constant
+// on-screen size on any device, not just at any zoom level — dividing by
+// zoom alone (an earlier approach) only accounted for zoom, not device width.
+let currentPxPerSvgUnit = 1;
+
+function screenPx(px) {
+  return px / currentPxPerSvgUnit;
+}
 
 // Where the map opens by default: a radius around the user's location, or
 // around London if location isn't already known. This only sets the starting
@@ -703,7 +721,7 @@ function mappableProperties(rows) {
 const MAP_CLUSTER_RADIUS_SCALE = 1.6;
 
 function individualMarkerRadius() {
-  return MAP_MARKER_RADIUS / currentMapZoom;
+  return screenPx(MAP_MARKER_RADIUS);
 }
 
 // A group's on-screen radius once it's actually drawn — bigger for a
@@ -829,7 +847,7 @@ function drawMapMarkers(svg) {
       const ids = cluster.map((m) => m.property.id);
       const active = ids.includes(selectedId);
       const r = drawnRadiusForGroupSize(cluster.length);
-      const fontSize = (MAP_MARKER_RADIUS * 1.15) / currentMapZoom;
+      const fontSize = screenPx(MAP_MARKER_RADIUS * 1.15);
       // A cluster all of one institution group keeps that colour; a mixed
       // cluster falls back to a neutral tone rather than picking one
       // arbitrarily.
@@ -882,9 +900,9 @@ const UK_CITIES = [
 function drawCityLabels(svg) {
   const group = svg.querySelector(".map-cities");
   if (!group) return;
-  const r = 3 / currentMapZoom;
-  const labelGap = 5 / currentMapZoom;
-  const fontSize = 9 / currentMapZoom;
+  const r = screenPx(3);
+  const labelGap = screenPx(5);
+  const fontSize = screenPx(9);
   group.innerHTML = UK_CITIES.map((city) => {
     const [x, y] = projectToMap(city.longitude, city.latitude);
     return `<g class="map-city">
@@ -907,7 +925,7 @@ function drawLocationMarker(svg) {
   const group = svg.querySelector(".map-location-marker");
   if (!group) return;
 
-  const r = MAP_MARKER_RADIUS / currentMapZoom;
+  const r = individualMarkerRadius();
   if (state.userLocation) {
     const [x, y] = projectToMap(state.userLocation.longitude, state.userLocation.latitude);
     group.innerHTML = `
@@ -1042,10 +1060,19 @@ function wireMapInteractions(svg) {
 
   function applyView() {
     svg.setAttribute("viewBox", `${view.x.toFixed(2)} ${view.y.toFixed(2)} ${view.w.toFixed(2)} ${view.h.toFixed(2)}`);
-    // Keep markers a constant on-screen size as the map zooms. currentMapZoom
-    // is also read by renderMap() so markers inserted later (after a filter
-    // change) come in at the right size instead of momentarily full-size.
-    currentMapZoom = baseView.w / view.w;
+    // Keep markers a constant on-screen size as the map zooms or the wrapper
+    // is a different physical width (e.g. phone vs desktop) — both are read
+    // by renderMap() too, so markers inserted later (after a filter change)
+    // come in at the right size instead of momentarily full-size. The SVG's
+    // own preserveAspectRatio="xMidYMid meet" scales by whichever of
+    // width/height is more constraining and letterboxes the other (see the
+    // fixed-height, full-width wrapper) — using rect.width alone here would
+    // be wrong whenever the current view is letterboxed by height instead
+    // (e.g. the full, tall UK extent inside a wide, short wrapper).
+    const rect = svg.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      currentPxPerSvgUnit = Math.min(rect.width / view.w, rect.height / view.h);
+    }
     // Clusters are zoom-dependent (whether two markers are "close enough to
     // merge" is a screen-pixel question), so every zoom step needs to redraw,
     // not just filter-driven renders. Panning alone doesn't change on-screen

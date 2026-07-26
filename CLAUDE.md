@@ -95,6 +95,33 @@ the fixed box and pads the rest with `--map-sea`, so a zoomed-out or
 near-square crop just gets letterboxed by the sea colour rather than shrinking
 the box to match — that letterboxing is intentional, not a bug.
 
+Marker/label sizing (`MAP_MARKER_RADIUS`, `screenPx()`) targets a constant
+*screen*-pixel size — on any device, not just at any zoom level. `currentMapZoom`
+alone (an earlier version) only compensated for zoom, so the same "10 SVG
+units" radius rendered at wildly different physical sizes depending on the
+wrapper's actual CSS width — e.g. ~8px across on a phone, well under Apple's
+~44px touch-target guidance, which is why markers were hard to tap on iPhone.
+`currentPxPerSvgUnit` (updated in `applyView()`, which already measures the
+wrapper) now tracks the *effective* px-per-unit scale so `screenPx(n)` returns
+the right SVG-unit size for an "n on-screen pixels" target regardless of
+device. Getting this right requires accounting for the letterboxing above:
+`preserveAspectRatio="meet"` scales by whichever of width/height is more
+constraining (`Math.min(rect.width / view.w, rect.height / view.h)`) — using
+`rect.width` alone (tried first) silently returns the *wrong* scale whenever
+the current view is letterboxed by height instead, e.g. the full, tall UK
+extent inside a wide, short wrapper (exactly the default reset-zoom state).
+`MAP_MARKER_RADIUS` is now a target of 16 screen px (~32px on-screen
+diameter) — still short of ideal touch-target size, but a large jump from an
+effectively-invisible ~8px on a phone, without making desktop markers absurd
+(both now render at the *same* size, by design). A side effect worth knowing:
+bigger on-screen markers legitimately overlap more at full-UK zoom, so dense
+regions (South-East England) can now consolidate into one very large cluster
+there — especially on a narrow/mobile viewport, where the whole UK's real-world
+extent is squeezed into a smaller physical canvas than desktop, so the same
+constant marker size covers proportionally more of it. That's the intended
+trade-off of the no-overlap guarantee at a bigger marker size, not a bug —
+zooming in (manually, or by tapping the cluster) still separates it.
+
 Pinch-zoom and double-tap-to-zoom are hand-rolled on top of Pointer Events in
 `wireMapInteractions()` (there's no touch-gesture library) — `setPointerCapture`
 is wrapped in try/catch there because a throw from it would otherwise abort the
@@ -273,10 +300,12 @@ institution's own colour — a National Trust for Scotland property should
 render in National Trust's green) with unvisited noticeably lighter than
 visited, the location marker should be a house icon at London with no
 geolocation permission and a "you are here" dot once granted, and
-marker/cluster borders should stay visually thin even zoomed in deep),
-mark-visited, add/edit property, the duplicate-name and half-coordinate
-validations, and both light and dark themes. To test the location marker,
-geolocation must be set on the Playwright **browser context**
-(`browser.newContext({ geolocation: {...}, permissions: ["geolocation"] })`),
-not the page — and Chromium only honours
+marker/cluster borders should stay visually thin even zoomed in deep, and a
+marker's rendered on-screen size — read its `<circle>`'s `getBoundingClientRect()`,
+not just the SVG-unit `r` attribute — should come out the *same* on a phone-sized
+viewport as on desktop, not smaller), mark-visited, add/edit property, the
+duplicate-name and half-coordinate validations, and both light and dark
+themes. To test the location marker, geolocation must be set on the
+Playwright **browser context** (`browser.newContext({ geolocation: {...},
+permissions: ["geolocation"] })`), not the page — and Chromium only honours
 it when both options are set together.

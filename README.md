@@ -16,7 +16,9 @@ Cadw, RHS gardens and independent houses.
   Trust's green). Opens immediately (it never waits on a location fix) zoomed
   to the 50 miles around your location if already known, or London otherwise,
   with pinch, double-tap/double-click, scroll, and on-screen +/− controls to
-  zoom, and drag to pan. Markers never overlap — any close enough to touch
+  zoom, and drag to pan. Markers render at the same on-screen size on a phone
+  as on desktop, sized for tapping rather than a fixed map-unit size that
+  would render tiny on a small screen. Markers never overlap — any close enough to touch
   merge into one bigger numbered icon, and zooming in (or tapping the icon)
   splits them back into individual markers once there's room to show them
   separately. Tapping either opens a selection card — a small carousel when
