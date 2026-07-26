@@ -865,11 +865,17 @@ function drawMapMarkers(svg) {
   return rows.length - plotted.length;
 }
 
-// Major cities shown as background landmarks purely for orientation — not
-// selectable, not properties, never clustered with them. Roughly evenly
-// spread across all four nations (rather than clustering in England, which
-// has more big cities) so the map still reads as a UK-wide picture at a
-// glance, even zoomed out.
+// Background landmarks purely for orientation — not selectable, not
+// properties, never clustered with them. Started as just the ~20 major
+// cities below; market towns were added afterwards so that (almost) every
+// property has *some* labelled landmark within a reasonable distance, not
+// just whichever properties happen to be near a big city. A literal "every
+// property within 5 miles" turned out to need ~260 more towns — essentially
+// one per property, which would have swamped the map with as many labels as
+// there are properties — so the actual target here is closer: every property
+// in the seed data is within 20 miles of one of these (most within 10), a
+// deliberate trade-off between real coverage and keeping this a sparse,
+// glanceable background layer rather than another data layer to read.
 const UK_CITIES = [
   { name: "London", latitude: 51.5074, longitude: -0.1278 },
   { name: "Birmingham", latitude: 52.4862, longitude: -1.8904 },
@@ -891,6 +897,94 @@ const UK_CITIES = [
   { name: "Newport", latitude: 51.5842, longitude: -2.9977 },
   { name: "Belfast", latitude: 54.5973, longitude: -5.9301 },
   { name: "Derry~Londonderry", latitude: 54.9966, longitude: -7.3086 },
+
+  // Market towns and smaller cities added for broader coverage (see comment above).
+  { name: "Tunbridge Wells", latitude: 51.1324, longitude: 0.2637 },
+  { name: "York", latitude: 53.9591, longitude: -1.0815 },
+  { name: "Petworth", latitude: 50.9922, longitude: -0.6122 },
+  { name: "Cheltenham", latitude: 51.8994, longitude: -2.0783 },
+  { name: "Dorchester", latitude: 50.7156, longitude: -2.4367 },
+  { name: "Bangor", latitude: 53.228, longitude: -4.1287 },
+  { name: "Wells-next-the-Sea", latitude: 52.9575, longitude: 0.8486 },
+  { name: "Buckingham", latitude: 52.0009, longitude: -0.9866 },
+  { name: "Newquay", latitude: 50.4155, longitude: -5.0837 },
+  { name: "Bury St Edmunds", latitude: 52.2447, longitude: 0.716 },
+  { name: "Bridgnorth", latitude: 52.5366, longitude: -2.4214 },
+  { name: "Windermere", latitude: 54.3803, longitude: -2.9046 },
+  { name: "Salisbury", latitude: 51.0693, longitude: -1.7936 },
+  { name: "Alnwick", latitude: 55.4147, longitude: -1.7058 },
+  { name: "Melrose", latitude: 55.5992, longitude: -2.7264 },
+  { name: "Reading", latitude: 51.4543, longitude: -0.9781 },
+  { name: "Tiverton", latitude: 50.9046, longitude: -3.4913 },
+  { name: "Portsmouth", latitude: 50.7989, longitude: -1.0912 },
+  { name: "Leyburn", latitude: 54.3096, longitude: -1.8296 },
+  { name: "Plymouth", latitude: 50.3755, longitude: -4.1427 },
+  { name: "Ashbourne", latitude: 53.0163, longitude: -1.7317 },
+  { name: "Wrexham", latitude: 53.0478, longitude: -2.9916 },
+  { name: "Haywards Heath", latitude: 51.0016, longitude: -0.1017 },
+  { name: "Ledbury", latitude: 52.0333, longitude: -2.4256 },
+  { name: "Penrith", latitude: 54.6641, longitude: -2.7527 },
+  { name: "Wareham", latitude: 50.6875, longitude: -2.1082 },
+  { name: "Barnstaple", latitude: 51.0803, longitude: -4.0585 },
+  { name: "Cambridge", latitude: 52.2053, longitude: 0.1218 },
+  { name: "Rochester", latitude: 51.3881, longitude: 0.5026 },
+  { name: "Scarborough", latitude: 54.2795, longitude: -0.4013 },
+  { name: "Oban", latitude: 56.4152, longitude: -5.4719 },
+  { name: "Stirling", latitude: 56.1165, longitude: -3.9369 },
+  { name: "Kirkwall", latitude: 58.9822, longitude: -2.9605 },
+  { name: "Stamford", latitude: 52.6547, longitude: -0.478 },
+  { name: "Penzance", latitude: 50.1186, longitude: -5.5371 },
+  { name: "King's Lynn", latitude: 52.7526, longitude: 0.4022 },
+  { name: "Bishop's Stortford", latitude: 51.8698, longitude: 0.1623 },
+  { name: "Enniskillen", latitude: 54.3439, longitude: -7.6382 },
+  { name: "Bushmills", latitude: 55.2027, longitude: -6.5185 },
+  { name: "Dover", latitude: 51.1279, longitude: 1.3134 },
+  { name: "Framlingham", latitude: 52.2237, longitude: 1.3428 },
+  { name: "Hexham", latitude: 54.9707, longitude: -2.1015 },
+  { name: "Ayr", latitude: 55.4586, longitude: -4.6292 },
+  { name: "Fort William", latitude: 56.8198, longitude: -5.105 },
+  { name: "Forres", latitude: 57.6044, longitude: -3.6042 },
+  { name: "Castle Douglas", latitude: 54.9391, longitude: -3.9366 },
+  { name: "St Davids", latitude: 51.882, longitude: -5.2688 },
+  { name: "Lowestoft", latitude: 52.4726, longitude: 1.7495 },
+  { name: "Warminster", latitude: 51.2035, longitude: -2.1809 },
+  { name: "Chippenham", latitude: 51.459, longitude: -2.1109 },
+  { name: "Ilminster", latitude: 50.9134, longitude: -2.9082 },
+  { name: "Moretonhampstead", latitude: 50.6606, longitude: -3.7623 },
+  { name: "Leominster", latitude: 52.226, longitude: -2.736 },
+  { name: "Burnley", latitude: 53.7898, longitude: -2.2453 },
+  { name: "Middlesbrough", latitude: 54.5742, longitude: -1.235 },
+  { name: "Downpatrick", latitude: 54.3308, longitude: -5.7139 },
+  { name: "Dungannon", latitude: 54.501, longitude: -6.7692 },
+  { name: "Camelford", latitude: 50.6205, longitude: -4.6975 },
+  { name: "Brodick", latitude: 55.5766, longitude: -5.1444 },
+  { name: "Helensburgh", latitude: 56.0011, longitude: -4.733 },
+  { name: "Gairloch", latitude: 57.7168, longitude: -5.6853 },
+  { name: "Alford", latitude: 57.2333, longitude: -2.7 },
+  { name: "Turriff", latitude: 57.5347, longitude: -2.4547 },
+  { name: "Fionnphort", latitude: 56.3227, longitude: -6.3735 },
+  { name: "Lerwick", latitude: 60.1547, longitude: -1.1494 },
+  { name: "Porthmadog", latitude: 52.9233, longitude: -4.1339 },
+  { name: "Guildford", latitude: 51.2362, longitude: -0.5704 },
+  { name: "Pitlochry", latitude: 56.704, longitude: -3.7275 },
+  { name: "Lechlade", latitude: 51.6989, longitude: -1.6906 },
+  { name: "Golspie", latitude: 57.9707, longitude: -3.9673 },
+  { name: "Dartmouth", latitude: 50.3512, longitude: -3.5786 },
+  { name: "Stranraer", latitude: 54.9016, longitude: -5.0281 },
+  { name: "Aberaeron", latitude: 52.2419, longitude: -4.2606 },
+  { name: "Lincoln", latitude: 53.2307, longitude: -0.5406 },
+  { name: "Hull", latitude: 53.7676, longitude: -0.3274 },
+  { name: "Abergele", latitude: 53.2818, longitude: -3.5764 },
+  { name: "Stratford-upon-Avon", latitude: 52.1917, longitude: -1.7073 },
+  { name: "Northampton", latitude: 52.2405, longitude: -0.9027 },
+  { name: "Bedford", latitude: 52.1362, longitude: -0.4668 },
+  { name: "Stoke-on-Trent", latitude: 53.0027, longitude: -2.1794 },
+  { name: "Welshpool", latitude: 52.6604, longitude: -3.1467 },
+  { name: "Eastbourne", latitude: 50.7687, longitude: 0.29 },
+  { name: "Thirsk", latitude: 54.2332, longitude: -1.3432 },
+  { name: "Barrow-in-Furness", latitude: 54.1092, longitude: -3.2262 },
+  { name: "Sumburgh", latitude: 59.8776, longitude: -1.2989 },
+  { name: "Ashford", latitude: 51.1465, longitude: 0.8724 },
 ];
 
 // Small muted dot + label per city, always redrawn alongside the property

@@ -24,8 +24,10 @@ Cadw, RHS gardens and independent houses.
   separately. Tapping either opens a selection card — a small carousel when
   more than one property is involved — with a × to close it. A pulsing dot
   marks your current location once known, or a house icon at London stands in
-  for it until then. About 20 major cities are shown as muted background
-  labels, spread across all four nations, for orientation
+  for it until then. Major cities and market towns are shown as muted
+  background labels for orientation, spread across all four nations and
+  picked so that every property in the seed data has one within about 20
+  miles, not just the properties near a big city
 - **Mark a place as visited or not**, a single toggle — no dates, notes, or
   visit history to manage
 - **Add your own properties**, capturing name, location, institution(s),

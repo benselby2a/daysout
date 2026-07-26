@@ -228,14 +228,24 @@ one. Because colour is set inline, the old `.map-marker.visited`/`.unvisited`
 CSS rules were removed entirely — reintroducing class-based fill rules would
 silently override the inline colour via CSS cascade.
 
-The map also carries a fixed set of ~20 major UK cities (`UK_CITIES`,
-`drawCityLabels()`) as muted, non-interactive background landmarks — spread
-across all four nations rather than clustered in England (which has more big
-cities), purely so the map reads at a glance even zoomed out. They live in
-their own `.map-cities` group between the nation outlines and the property
-markers, are never counted in `clusterPointsNoOverlap()`, and use the same
-constant-on-screen-size approach (dividing by `currentMapZoom`) as everything
-else on the map.
+The map also carries a fixed set of ~106 UK cities and market towns
+(`UK_CITIES`, `drawCityLabels()`) as muted, non-interactive background
+landmarks. The original ~20 were just the major cities, spread across all
+four nations rather than clustered in England (which has more big cities);
+the market towns were added afterwards so that (almost) every property has
+*some* labelled landmark nearby, not just properties near a big city. A
+literal "every property within 5 miles" turned out to need ~260 more towns —
+essentially one per property — so the actual target is every property within
+20 miles of a landmark (most within 10), a deliberate trade-off computed with
+a greedy set-cover script (farthest/densest-point-first, see git history)
+against the seed data rather than picked by eye. They live in their own
+`.map-cities` group between the nation outlines and the property markers,
+are never counted in `clusterPointsNoOverlap()`, and use the same
+constant-on-screen-size approach (`screenPx()`) as everything else on the
+map. At this density labels do overlap each other in the densest regions
+(South-East England) when zoomed out — there's no label-collision avoidance,
+consistent with these being a sparse decorative layer rather than another
+data layer to read; zooming in spreads them out along with the markers.
 
 Markers have no `<title>` child and rely only on `aria-label` plus the custom
 `.uk-map-tooltip` — that tooltip is built from a `pointermove` handler
