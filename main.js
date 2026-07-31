@@ -2,6 +2,7 @@ const SUPABASE_URL = "https://cnkznpkvwoqxaiywwmhr.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_xlNQ_QudJNUlMLjWpr0iJA_YgO87tox";
 
 const UK_MAP_URL = "./data/uk.json";
+const UK_ROADS_URL = "./data/uk-roads.json";
 const FILTER_STORAGE_KEY = "daysout.filters";
 const VIEW_STORAGE_KEY = "daysout.view";
 
@@ -157,6 +158,7 @@ const state = {
   },
   view: "list",
   mapFeatures: null,
+  mapRoads: null,
   mapDefaultCenter: null,
   // Ordered by distance to the last tap (closest first); more than one entry
   // means a cluster of nearby markers, browsed via selectedCardIndex.
@@ -682,12 +684,28 @@ async function loadUkMap() {
   return geojson.features || [];
 }
 
+// Roads are decorative background context, not critical to the map working
+// — fails soft (empty array) rather than blocking the nation outlines and
+// property markers that actually matter, unlike loadUkMap() above.
+async function loadUkRoads() {
+  try {
+    const res = await fetch(UK_ROADS_URL);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const geojson = await res.json();
+    return geojson.features || [];
+  } catch (err) {
+    console.error("[Days Out] Failed to load UK roads:", err);
+    return [];
+  }
+}
+
 let ukMapPromise = null;
 function ensureUkMapLoaded() {
   if (!ukMapPromise) {
-    ukMapPromise = loadUkMap()
-      .then((features) => {
+    ukMapPromise = Promise.all([loadUkMap(), loadUkRoads()])
+      .then(([features, roads]) => {
         state.mapFeatures = features;
+        state.mapRoads = roads;
         state.mapDefaultCenter = resolveMapDefaultCenter();
         mapTransform = computeMapTransform(features);
         renderMap();
@@ -1059,6 +1077,17 @@ function renderMap() {
       })
       .join("");
 
+    // Motorways/A-roads, purely background context like the nation outlines
+    // — positions never change, so (unlike markers/cities) this is built
+    // once here rather than redrawn on every zoom step or filter change.
+    const roads = (state.mapRoads || [])
+      .map((f) => {
+        const d = "M" + f.geometry.coordinates.map(([lon, lat]) => projectToMap(lon, lat).map((v) => v.toFixed(1)).join(",")).join("L");
+        const kind = f.properties.kind === "motorway" ? "motorway" : "primary";
+        return `<path class="map-road map-road-${kind}" d="${d}"></path>`;
+      })
+      .join("");
+
     el.ukMap.innerHTML = `
       <div class="uk-map-svg-wrap">
         <div class="map-zoom-controls">
@@ -1078,6 +1107,7 @@ function renderMap() {
         </div>
         <svg class="uk-map-svg" viewBox="0 0 ${mapTransform.width} ${mapTransform.height.toFixed(1)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of visited properties across the UK">
           <g class="map-nations">${nations}</g>
+          <g class="map-roads">${roads}</g>
           <g class="map-cities"></g>
           <g class="map-markers"></g>
           <g class="map-location-marker"></g>

@@ -27,7 +27,9 @@ Cadw, RHS gardens and independent houses.
   for it until then. Major cities and market towns are shown as muted
   background labels for orientation, spread across all four nations and
   picked so that every property in the seed data has one within about 20
-  miles, not just the properties near a big city
+  miles, not just the properties near a big city. Motorways and A-roads are
+  drawn as muted background lines for the same reason — ground context, not
+  another data layer to read
 - **Mark a place as visited or not**, a single toggle — no dates, notes, or
   visit history to manage
 - **Add your own properties**, capturing name, location, institution(s),
@@ -117,3 +119,7 @@ your data.
   dataset (public domain), simplified and trimmed of very small islands. It is
   bundled locally so the map needs no external requests. The app draws it with
   an Albers equal-area conic projection tuned to the UK.
+- `data/uk-roads.json` holds motorways and A-roads (274 segments), also from
+  Natural Earth (`ne_10m_roads`, public domain), filtered to the UK and
+  bundled locally the same way. If it fails to load, the map still works —
+  roads are decorative background context, not required.

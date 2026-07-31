@@ -73,6 +73,22 @@ islands. The app projects it with an Albers equal-area conic tuned to the UK
 (`projectAlbers`); the same projection places property markers, so it is the
 single source of truth for map geometry.
 
+`data/uk-roads.json` holds motorways and A-roads (274 line segments), also
+from Natural Earth (`ne_10m_roads`, filtered to a UK bounding box and
+cross-checked against `data/uk.json`'s land polygons so segments in nearby
+countries — Ireland, France — aren't included). Fetched via
+`fetch(UK_ROADS_URL)` in `loadUkRoads()`, in parallel with `loadUkMap()` —
+unlike the nation outlines, a roads-fetch failure fails soft (empty array,
+console error only) rather than blocking the map, since roads are background
+context and not needed for the map to actually work. Drawn once in the shell
+build (`renderMap()`), not redrawn per zoom step or filter change, since
+positions never change and `vector-effect: non-scaling-stroke` already keeps
+line width constant on screen — the same reasoning `.map-nation` outlines
+already use. Rendered in their own `.map-roads` group between the nation
+fill and the city labels/property markers so roads read as ground context
+underneath everything else, and are `pointer-events: none` throughout, same
+as city labels.
+
 The map opens zoomed to `DEFAULT_MAP_RADIUS_MILES` around the user's location
 if already known (`state.userLocation`, e.g. from an earlier "Nearest to me"),
 or London otherwise (`resolveMapDefaultCenter()`) — it **never** waits on a

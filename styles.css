@@ -35,6 +35,8 @@
   --map-land: #e4ebe6;
   --map-land-stroke: #a9b8b0;
   --map-sea: #eaf1f7;
+  --road-motorway: #6b8fb5;
+  --road-primary: #b58a5a;
 
   --inst-nt: #2f7d51;
   --inst-nts: #2f6d9e;
@@ -78,6 +80,8 @@
   --map-land: #262b35;
   --map-land-stroke: #3d4552;
   --map-sea: #141822;
+  --road-motorway: #7ea3cc;
+  --road-primary: #c99f6e;
 
   --inst-nt: #56b984;
   --inst-nts: #63a6d8;
@@ -624,6 +628,33 @@ button.ghost {
   stroke: var(--map-land-stroke);
   stroke-width: 0.6;
   stroke-linejoin: round;
+}
+
+/* Motorways/A-roads — background context only, never interactive. Muted
+   opacity so they read as a supporting layer under the property markers
+   rather than competing with them; vector-effect keeps the line width
+   constant on screen regardless of zoom, same as marker borders. */
+.map-roads {
+  pointer-events: none;
+}
+
+.map-road {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-road-motorway {
+  stroke: var(--road-motorway);
+  stroke-width: 1.6;
+  opacity: 0.7;
+}
+
+.map-road-primary {
+  stroke: var(--road-primary);
+  stroke-width: 1;
+  opacity: 0.55;
 }
 
 /* Fill is set per-element inline (institution colour, lighter for
