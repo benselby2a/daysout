@@ -196,10 +196,20 @@ dense point cloud with too generous a radius doesn't stay local. Escalating
 the merge distance only for the *specific pairs* that would actually overlap,
 rather than assuming from the start that everything might end up
 cluster-sized, avoids that. All radii live in the same map/SVG-unit space as
-point coordinates (`individualMarkerRadius() = MAP_MARKER_RADIUS /
-currentMapZoom`), so distance-vs-radius comparisons need no separate
-screen-pixel conversion and stay correct regardless of zoom or the map's
-on-screen size.
+point coordinates (`individualMarkerRadius() = screenPx(MAP_MARKER_RADIUS)`),
+so distance-vs-radius comparisons need no separate screen-pixel conversion
+and stay correct regardless of zoom or the map's on-screen size.
+
+Even with that fix, growing the marker size later (see `MAP_MARKER_RADIUS`'s
+history above) reopened essentially the same problem at a bigger radius: one
+region could still consolidate into a 240+-member cluster, just at a higher
+percolation threshold than before. `MAP_CLUSTER_MAX_SIZE` (50) caps this
+directly — both `clusterPoints()`'s phase-1 growth and phase-2's merge step
+refuse to produce a group bigger than that, even if it means two capped
+clusters are left slightly overlapping near each other in an unusually dense
+area. This is a deliberate step back from the strict "markers never overlap"
+guarantee: several capped, mostly-separate clusters read as far more useful
+than one region turning into a single giant blob with a number in it.
 
 Each marker/cluster carries `data-property-ids` — always a comma-separated
 list, even for a single property — instead of a singular id, so pointer
@@ -272,10 +282,19 @@ against the seed data rather than picked by eye. They live in their own
 `.map-cities` group between the nation outlines and the property markers,
 are never counted in `clusterPointsNoOverlap()`, and use the same
 constant-on-screen-size approach (`screenPx()`) as everything else on the
-map. At this density labels do overlap each other in the densest regions
-(South-East England) when zoomed out — there's no label-collision avoidance,
-consistent with these being a sparse decorative layer rather than another
-data layer to read; zooming in spreads them out along with the markers.
+map. At this density, showing all ~106 unconditionally used to make labels
+overlap each other illegibly in the densest regions (South-East England)
+when zoomed out. `drawCityLabels()` now skips drawing a city (dot and label
+together, not just the text) whenever its approximate on-screen label box
+would overlap one already placed, checked in `UK_CITIES`' array order — the
+~20 major cities are listed first, so they win any conflict over the market
+towns appended after them. There's no real text-metrics call available
+without a canvas, so label width is approximated as `name.length *
+CITY_LABEL_CHAR_WIDTH_PX` — good enough to decide "would these collide?", not
+meant to be pixel-perfect typesetting. Recomputed on every zoom step for the
+same reason clusters are: whether two labels are "too close" is a
+screen-pixel question that eases as you zoom in, so a city hidden at full
+zoom-out can reappear once its neighbours are far enough apart on screen.
 
 Markers have no `<title>` child and rely only on `aria-label` plus the custom
 `.uk-map-tooltip` — that tooltip is built from a `pointermove` handler
@@ -330,10 +349,17 @@ the map (marker count should match the filtered rows, the default zoom framing
 shouldn't be confused with a full-UK view when selecting a marker by id,
 clusters should show the right count and fully un-merge into individual
 markers on zoom-in or on tapping the cluster — not partially, e.g. a 3+
-member cluster resolving to "1 + 2" —, no two rendered markers/clusters
-should ever overlap regardless of zoom level (checking every pairwise
-`cx`/`cy`/`r` on the rendered `<circle>`s is a good way to confirm this
-directly rather than eyeballing a screenshot), hovering a marker/cluster
+member cluster resolving to "1 + 2" —, no cluster should ever exceed
+`MAP_CLUSTER_MAX_SIZE` members (check `data-property-ids` split length on
+every `.map-marker-cluster`) even in the densest mock data, no two rendered
+markers/clusters should ever overlap regardless of zoom level *except* where
+the size cap forced it (checking every pairwise `cx`/`cy`/`r` on the
+rendered `<circle>`s is a good way to confirm this directly rather than
+eyeballing a screenshot), no two city/town labels should overlap at any zoom
+level either (same pairwise check, but on each `.map-city text`'s real
+`getBoundingClientRect()`, not the approximate width `drawCityLabels()` uses
+internally to decide what to draw) and more of them should appear as you
+zoom in, hovering a marker/cluster
 should show only the custom tooltip and never a native one, marker colour
 should track the property's institution *group* (not each exact
 institution's own colour — a National Trust for Scotland property should

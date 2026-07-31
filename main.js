@@ -738,6 +738,15 @@ function mappableProperties(rows) {
 // MAP_CLUSTER_RADIUS_SCALE below in drawMapMarkers()).
 const MAP_CLUSTER_RADIUS_SCALE = 1.6;
 
+// No single cluster grows past this many properties, even if that means
+// allowing a little visual overlap between it and a neighbouring cluster in
+// an unusually dense region (South-East England, at full-UK zoom, with the
+// bigger marker size — see MAP_MARKER_RADIUS's history) — a strict
+// no-overlap guarantee at any cost let one region consolidate into a single
+// 240+-member blob, which read as far less useful than several
+// medium-sized, slightly-overlapping ones.
+const MAP_CLUSTER_MAX_SIZE = 50;
+
 function individualMarkerRadius() {
   return screenPx(MAP_MARKER_RADIUS);
 }
@@ -757,7 +766,7 @@ function drawnRadiusForGroupSize(size) {
 // hundred points); real property data doesn't chain into long lines the way
 // a pathological input could, so single-linkage's usual failure mode isn't a
 // practical concern here.
-function clusterPoints(points, radiusSvgUnits) {
+function clusterPoints(points, radiusSvgUnits, maxSize = Infinity) {
   const clusters = [];
   const assigned = new Set();
   for (const point of points) {
@@ -765,9 +774,10 @@ function clusterPoints(points, radiusSvgUnits) {
     const cluster = [point];
     assigned.add(point);
     let grew = true;
-    while (grew) {
+    while (grew && cluster.length < maxSize) {
       grew = false;
       for (const other of points) {
+        if (cluster.length >= maxSize) break;
         if (assigned.has(other)) continue;
         if (cluster.some((m) => Math.hypot(m.x - other.x, m.y - other.y) <= radiusSvgUnits)) {
           cluster.push(other);
@@ -788,17 +798,21 @@ function groupCentroid(members) {
   };
 }
 
-// Groups points so no two resulting markers ever visually overlap. A first
-// pass clusters on individual-marker size (guarantees no two lone markers
-// overlap); a cluster icon is drawn bigger than that, though, so a second
-// pass repeatedly merges any two groups whose *drawn* circles would still
+// Groups points so no two resulting markers ever visually overlap (up to
+// MAP_CLUSTER_MAX_SIZE — see there). A first pass clusters on
+// individual-marker size (guarantees no two lone markers overlap); a
+// cluster icon is drawn bigger than that, though, so a second pass
+// repeatedly merges any two groups whose *drawn* circles would still
 // collide — using each group's actual current size, not assuming every
 // point might end up cluster-sized from the start. That blanket assumption
 // (an earlier version) cascades into one enormous cluster in densely-packed
 // regions once the merge radius crosses a percolation threshold: escalating
 // only where a specific pair of groups actually collides avoids that.
 function clusterPointsNoOverlap(points) {
-  let groups = clusterPoints(points, individualMarkerRadius() * 2).map((members) => ({ members, ...groupCentroid(members) }));
+  let groups = clusterPoints(points, individualMarkerRadius() * 2, MAP_CLUSTER_MAX_SIZE).map((members) => ({
+    members,
+    ...groupCentroid(members),
+  }));
 
   for (let pass = 0; pass < 10; pass++) {
     let mergedAny = false;
@@ -806,6 +820,7 @@ function clusterPointsNoOverlap(points) {
       for (let j = i + 1; j < groups.length; j++) {
         const a = groups[i];
         const b = groups[j];
+        if (a.members.length + b.members.length > MAP_CLUSTER_MAX_SIZE) continue;
         const limit = drawnRadiusForGroupSize(a.members.length) + drawnRadiusForGroupSize(b.members.length);
         if (Math.hypot(a.x - b.x, a.y - b.y) <= limit) {
           const members = a.members.concat(b.members);
@@ -1005,23 +1020,57 @@ const UK_CITIES = [
   { name: "Ashford", latitude: 51.1465, longitude: 0.8724 },
 ];
 
+// Roughly how wide a label renders per character at the target font size —
+// there's no cheap real text-metrics call available without a canvas, and
+// this is only needed to decide whether two labels would collide, not to
+// lay out real typography, so an approximation is good enough.
+const CITY_LABEL_CHAR_WIDTH_PX = 5.2;
+const CITY_LABEL_FONT_PX = 9;
+
 // Small muted dot + label per city, always redrawn alongside the property
 // markers so the label/dot stay a constant on-screen size regardless of
 // zoom — same approach as drawLocationMarker(). Purely decorative context:
 // no data-property-ids, no pointer handling, never counted in clusters.
+//
+// Labels overlap at full-UK zoom purely because there isn't room for all
+// ~106 at once — rather than let them visually collide (illegible), each
+// city is only drawn if its approximate on-screen label box doesn't overlap
+// one already placed, checked in UK_CITIES' array order so the ~20 major
+// cities (listed first) win any conflict over the market towns appended
+// after them. Recomputed on every call (including every zoom step, from
+// applyView()), since whether two labels are "too close" is a screen-pixel
+// question that eases as you zoom in — a city hidden at full zoom-out can
+// reappear once its neighbours are far enough apart on screen.
 function drawCityLabels(svg) {
   const group = svg.querySelector(".map-cities");
   if (!group) return;
   const r = screenPx(3);
   const labelGap = screenPx(5);
-  const fontSize = screenPx(9);
-  group.innerHTML = UK_CITIES.map((city) => {
+  const fontSize = screenPx(CITY_LABEL_FONT_PX);
+  const halfHeight = fontSize * 0.6;
+
+  const placed = [];
+  const visible = [];
+  for (const city of UK_CITIES) {
     const [x, y] = projectToMap(city.longitude, city.latitude);
-    return `<g class="map-city">
+    const labelY = y - r - labelGap - fontSize / 2;
+    const halfWidth = screenPx((city.name.replace("~", "/").length * CITY_LABEL_CHAR_WIDTH_PX) / 2);
+    const overlapsPlaced = placed.some(
+      (other) => Math.abs(x - other.x) < halfWidth + other.halfWidth && Math.abs(labelY - other.labelY) < halfHeight + other.halfHeight
+    );
+    if (overlapsPlaced) continue;
+    placed.push({ x, labelY, halfWidth, halfHeight });
+    visible.push({ city, x, y });
+  }
+
+  group.innerHTML = visible
+    .map(
+      ({ city, x, y }) => `<g class="map-city">
       <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}"></circle>
       <text x="${x.toFixed(1)}" y="${(y - r - labelGap).toFixed(1)}" font-size="${fontSize.toFixed(2)}">${escapeHtml(city.name.replace("~", "/"))}</text>
-    </g>`;
-  }).join("");
+    </g>`
+    )
+    .join("");
 }
 
 // A simple house pictogram (roof + body) in a local -10..10 coordinate

@@ -18,17 +18,20 @@ Cadw, RHS gardens and independent houses.
   with pinch, double-tap/double-click, scroll, and on-screen +/− controls to
   zoom, and drag to pan. Markers render at the same on-screen size on a phone
   as on desktop, sized for tapping rather than a fixed map-unit size that
-  would render tiny on a small screen. Markers never overlap — any close enough to touch
-  merge into one bigger numbered icon, and zooming in (or tapping the icon)
-  splits them back into individual markers once there's room to show them
-  separately. Tapping either opens a selection card — a small carousel when
-  more than one property is involved — with a × to close it. A pulsing dot
-  marks your current location once known, or a house icon at London stands in
-  for it until then. Major cities and market towns are shown as muted
-  background labels for orientation, spread across all four nations and
-  picked so that every property in the seed data has one within about 20
-  miles, not just the properties near a big city. Motorways and A-roads are
-  drawn as muted background lines for the same reason — ground context, not
+  would render tiny on a small screen. Markers close enough to touch merge
+  into one bigger numbered icon (capped at 50 properties, so one very dense
+  region can't swallow the whole map into a single cluster), and zooming in
+  (or tapping the icon) splits them back into individual markers once
+  there's room to show them separately. Tapping either opens a selection
+  card — a small carousel when more than one property is involved — with a
+  × to close it. A pulsing dot marks your current location once known, or a
+  house icon at London stands in for it until then. Major cities and market
+  towns are shown as muted background labels for orientation, spread across
+  all four nations and picked so that every property in the seed data has
+  one within about 20 miles, not just the properties near a big city — at
+  full-UK zoom only as many are shown as fit without overlapping, and more
+  appear as you zoom in. Motorways and A-roads are drawn as muted background
+  lines for the same reason — ground context, not
   another data layer to read
 - **Mark a place as visited or not**, a single toggle — no dates, notes, or
   visit history to manage
