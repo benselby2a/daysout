@@ -334,6 +334,18 @@ reason, and also right after the silent background geolocation fetch in
 place without recentring the map (consistent with that fetch never
 retroactively moving the view either).
 
+A floating "scroll to top" button (`#scroll-top-btn`) only shows in list view,
+only once the filtered list has more than `SCROLL_TOP_MIN_ROWS` (10) rows, and
+only once the page is actually scrolled down past
+`SCROLL_TOP_SCROLL_THRESHOLD_PX` — showing it at the very top would be a
+button that does nothing when clicked. `updateScrollTopButton()` is called
+from `renderPropertyList()`, `toggleView()`, and a `window` `scroll` listener,
+so it stays in sync with filtering, switching views, and scrolling without
+needing its own render pass. Switching to map view (much shorter than a long
+list) makes the browser itself clamp `window.scrollY` back down if it no
+longer fits the shorter page — that's normal browser reflow behaviour, not
+something this feature needs to account for specially.
+
 ## Verifying changes
 
 There are no unit tests. The app is checked by driving it in Chromium with

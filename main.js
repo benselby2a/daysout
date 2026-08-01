@@ -190,6 +190,7 @@ const el = {
   propertyFormError: document.getElementById("property-form-error"),
   removeProperty: document.getElementById("remove-property"),
   statusToast: document.getElementById("status-toast"),
+  scrollTopBtn: document.getElementById("scroll-top-btn"),
 };
 
 /* ── Utilities ─────────────────────── */
@@ -540,6 +541,21 @@ function renderPropertyList() {
       </article>`;
     })
     .join("")}</div>`;
+  updateScrollTopButton();
+}
+
+// Only useful once there's actually a long list in view (list mode, more
+// than a handful of rows) and the user has already scrolled down from the
+// top — showing it right at the top would just be a button that does
+// nothing when clicked.
+const SCROLL_TOP_MIN_ROWS = 10;
+const SCROLL_TOP_SCROLL_THRESHOLD_PX = 300;
+
+function updateScrollTopButton() {
+  if (!el.scrollTopBtn) return;
+  const eligible = state.view === "list" && filteredProperties().length > SCROLL_TOP_MIN_ROWS;
+  const scrolledDown = window.scrollY > SCROLL_TOP_SCROLL_THRESHOLD_PX;
+  el.scrollTopBtn.classList.toggle("hidden", !(eligible && scrolledDown));
 }
 
 function render() {
@@ -1557,6 +1573,7 @@ function toggleView(view) {
   el.listTab.setAttribute("aria-selected", isList ? "true" : "false");
   el.mapTab.setAttribute("aria-selected", isList ? "false" : "true");
   if (!isList) renderMap();
+  updateScrollTopButton();
 }
 
 /* ── Property add / edit ───────────── */
@@ -1833,6 +1850,9 @@ document.addEventListener("click", (e) => {
 
 el.listTab?.addEventListener("click", () => toggleView("list"));
 el.mapTab?.addEventListener("click", () => toggleView("map"));
+
+el.scrollTopBtn?.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+window.addEventListener("scroll", updateScrollTopButton, { passive: true });
 
 document.getElementById("open-add-property")?.addEventListener("click", () => openPropertyModal(null));
 document.getElementById("property-cancel")?.addEventListener("click", () => el.propertyModal.classList.add("hidden"));

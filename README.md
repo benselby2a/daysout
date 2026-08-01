@@ -8,7 +8,8 @@ Cadw, RHS gardens and independent houses.
   visited) and a Sort toggle (A–Z / Nearest to me), each a single button that
   cycles through its values. The "Visited Properties" progress cards double as
   the institution filter — click one to narrow the list to it, click again
-  (or click "All places") to clear
+  (or click "All places") to clear. A floating button appears once you've
+  scrolled down a long list (more than 10 places) to jump back to the top
 - **Map view** — a polygon map of the UK with every property plotted by
   coordinates, coloured by institution group (visited in that group's colour,
   not visited in a lighter tint of the same colour — the same 4 groups as the
