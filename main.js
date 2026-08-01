@@ -1018,6 +1018,36 @@ const UK_CITIES = [
   { name: "Barrow-in-Furness", latitude: 54.1092, longitude: -3.2262 },
   { name: "Sumburgh", latitude: 59.8776, longitude: -1.2989 },
   { name: "Ashford", latitude: 51.1465, longitude: 0.8724 },
+
+  // A further batch, filling out some notable cities/towns the first two
+  // passes missed rather than chasing exhaustive coverage.
+  { name: "Exeter", latitude: 50.7184, longitude: -3.5339 },
+  { name: "Norwich", latitude: 52.6309, longitude: 1.2974 },
+  { name: "Southampton", latitude: 50.9097, longitude: -1.4044 },
+  { name: "Brighton", latitude: 50.8225, longitude: -0.1372 },
+  { name: "Coventry", latitude: 52.4068, longitude: -1.5197 },
+  { name: "Peterborough", latitude: 52.5695, longitude: -0.2405 },
+  { name: "Preston", latitude: 53.7632, longitude: -2.7031 },
+  { name: "Chester", latitude: 53.1934, longitude: -2.8931 },
+  { name: "Durham", latitude: 54.7761, longitude: -1.5733 },
+  { name: "Sunderland", latitude: 54.9069, longitude: -1.3838 },
+  { name: "Ipswich", latitude: 52.0567, longitude: 1.1482 },
+  { name: "Colchester", latitude: 51.8959, longitude: 0.9035 },
+  { name: "Blackpool", latitude: 53.8175, longitude: -3.0357 },
+  { name: "Wolverhampton", latitude: 52.5862, longitude: -2.1288 },
+  { name: "Truro", latitude: 50.2632, longitude: -5.051 },
+  { name: "Perth", latitude: 56.395, longitude: -3.4308 },
+  { name: "Kilmarnock", latitude: 55.6111, longitude: -4.4956 },
+  { name: "Paisley", latitude: 55.8459, longitude: -4.4239 },
+  { name: "Falkirk", latitude: 55.9997, longitude: -3.7833 },
+  { name: "Dumfries", latitude: 55.0709, longitude: -3.605 },
+  { name: "Kirkcaldy", latitude: 56.1165, longitude: -3.159 },
+  { name: "Merthyr Tydfil", latitude: 51.7453, longitude: -3.3786 },
+  { name: "Haverfordwest", latitude: 51.8021, longitude: -4.9683 },
+  { name: "Carmarthen", latitude: 51.8556, longitude: -4.3108 },
+  { name: "Newry", latitude: 54.1751, longitude: -6.3402 },
+  { name: "Antrim", latitude: 54.7168, longitude: -6.2137 },
+  { name: "Omagh", latitude: 54.5973, longitude: -7.3054 },
 ];
 
 // Roughly how wide a label renders per character at the target font size —
@@ -1163,11 +1193,6 @@ function renderMap() {
         </svg>
         <div class="uk-map-tooltip" hidden></div>
         <div class="map-selected"></div>
-      </div>
-      <div class="map-legend-bar">
-        <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-visited"></span> Visited (darker)</span>
-        <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-unvisited"></span> Not visited (lighter)</span>
-        <span class="map-legend-item"><span class="map-legend-dot map-legend-dot-cluster">3</span> Places close together</span>
       </div>
       <div class="map-no-coords hidden"></div>`;
 
@@ -1441,17 +1466,30 @@ function wireMapInteractions(svg) {
           // No duration limit here — a slow, deliberate press on a marker
           // should still select it, unlike the double-tap-zoom gesture below.
           selectMarkerByIds(tapCandidate.propertyIds);
-        } else if (now - tapCandidate.t <= TAP_MAX_DURATION_MS) {
-          const isDoubleTap =
-            lastTap &&
-            now - lastTap.t <= DOUBLE_TAP_MAX_GAP_MS &&
-            Math.hypot(tapCandidate.x - lastTap.x, tapCandidate.y - lastTap.y) <= DOUBLE_TAP_MAX_DISTANCE_PX;
-          if (isDoubleTap) {
-            const [originX, originY] = toSvgPointXY(tapCandidate.x, tapCandidate.y);
-            zoomAt(DOUBLE_TAP_ZOOM_FACTOR, originX, originY);
-            lastTap = null;
-          } else {
-            lastTap = tapCandidate;
+        } else {
+          // Tapping empty map space dismisses whatever's currently selected,
+          // same as the selection card's own close button — otherwise the
+          // only way to get rid of a card was that button or picking a
+          // different marker. Independent of the double-tap-zoom check
+          // below, which only cares about a *second* tap landing nearby.
+          if (state.selectedPropertyIds.length) {
+            state.selectedPropertyIds = [];
+            state.selectedCardIndex = 0;
+            drawMapMarkers(svg);
+            renderMapSelection();
+          }
+          if (now - tapCandidate.t <= TAP_MAX_DURATION_MS) {
+            const isDoubleTap =
+              lastTap &&
+              now - lastTap.t <= DOUBLE_TAP_MAX_GAP_MS &&
+              Math.hypot(tapCandidate.x - lastTap.x, tapCandidate.y - lastTap.y) <= DOUBLE_TAP_MAX_DISTANCE_PX;
+            if (isDoubleTap) {
+              const [originX, originY] = toSvgPointXY(tapCandidate.x, tapCandidate.y);
+              zoomAt(DOUBLE_TAP_ZOOM_FACTOR, originX, originY);
+              lastTap = null;
+            } else {
+              lastTap = tapCandidate;
+            }
           }
         }
       }

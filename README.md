@@ -23,9 +23,10 @@ Cadw, RHS gardens and independent houses.
   region can't swallow the whole map into a single cluster), and zooming in
   (or tapping the icon) splits them back into individual markers once
   there's room to show them separately. Tapping either opens a selection
-  card — a small carousel when more than one property is involved — with a
-  × to close it. A pulsing dot marks your current location once known, or a
-  house icon at London stands in for it until then. Major cities and market
+  card — a small carousel when more than one property is involved — closed
+  with its × or by tapping anywhere else on the map. A pulsing dot marks
+  your current location once known, or a house icon at London stands in for
+  it until then. Major cities and market
   towns are shown as muted background labels for orientation, spread across
   all four nations and picked so that every property in the seed data has
   one within about 20 miles, not just the properties near a big city — at
