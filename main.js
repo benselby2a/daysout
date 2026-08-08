@@ -1071,6 +1071,64 @@ const UK_CITIES = [
   { name: "Newry", latitude: 54.1751, longitude: -6.3402 },
   { name: "Antrim", latitude: 54.7168, longitude: -6.2137 },
   { name: "Omagh", latitude: 54.5973, longitude: -7.3054 },
+  // A further batch: closes the one real coverage gap left (Berwick-upon-Tweed
+  // area properties were over 20mi from the nearest labelled town) and adds
+  // general density elsewhere, including two cathedral cities the SE England
+  // churches batch highlighted as missing (Canterbury, Chichester).
+  { name: "Berwick-upon-Tweed", latitude: 55.7708, longitude: -2.0 },
+  { name: "Wooler", latitude: 55.548, longitude: -2.011 },
+  { name: "Canterbury", latitude: 51.2802, longitude: 1.0789 },
+  { name: "Chichester", latitude: 50.8365, longitude: -0.7792 },
+  { name: "Oxford", latitude: 51.752, longitude: -1.2577 },
+  { name: "Bath", latitude: 51.3811, longitude: -2.359 },
+  { name: "Winchester", latitude: 51.0632, longitude: -1.308 },
+  { name: "Bournemouth", latitude: 50.7192, longitude: -1.8808 },
+  { name: "Gloucester", latitude: 51.8642, longitude: -2.238 },
+  { name: "Worcester", latitude: 52.1936, longitude: -2.221 },
+  { name: "Hereford", latitude: 52.0567, longitude: -2.716 },
+  { name: "Shrewsbury", latitude: 52.7069, longitude: -2.753 },
+  { name: "Swindon", latitude: 51.5558, longitude: -1.7797 },
+  { name: "Milton Keynes", latitude: 52.0406, longitude: -0.7594 },
+  { name: "Luton", latitude: 51.8787, longitude: -0.42 },
+  { name: "Chelmsford", latitude: 51.7356, longitude: 0.4685 },
+  { name: "Southend-on-Sea", latitude: 51.5459, longitude: 0.7077 },
+  { name: "Folkestone", latitude: 51.081, longitude: 1.1828 },
+  { name: "Margate", latitude: 51.3813, longitude: 1.3862 },
+  { name: "Worthing", latitude: 50.8175, longitude: -0.3714 },
+  { name: "Crawley", latitude: 51.1092, longitude: -0.1873 },
+  { name: "Basingstoke", latitude: 51.2666, longitude: -1.0876 },
+  { name: "Taunton", latitude: 51.0175, longitude: -3.1027 },
+  { name: "Warwick", latitude: 52.2823, longitude: -1.5849 },
+  { name: "Kettering", latitude: 52.399, longitude: -0.728 },
+  { name: "Chesterfield", latitude: 53.235, longitude: -1.421 },
+  { name: "Mansfield", latitude: 53.1472, longitude: -1.1988 },
+  { name: "Grantham", latitude: 52.911, longitude: -0.639 },
+  { name: "Grimsby", latitude: 53.5675, longitude: -0.0803 },
+  { name: "Doncaster", latitude: 53.5228, longitude: -1.1285 },
+  { name: "Wakefield", latitude: 53.6833, longitude: -1.4977 },
+  { name: "Bradford", latitude: 53.796, longitude: -1.7594 },
+  { name: "Halifax", latitude: 53.722, longitude: -1.8631 },
+  { name: "Huddersfield", latitude: 53.6458, longitude: -1.785 },
+  { name: "Harrogate", latitude: 53.9919, longitude: -1.5378 },
+  { name: "Whitby", latitude: 54.4863, longitude: -0.6133 },
+  { name: "Darlington", latitude: 54.526, longitude: -1.554 },
+  { name: "Carlisle", latitude: 54.8951, longitude: -2.9382 },
+  { name: "Lancaster", latitude: 54.0466, longitude: -2.8007 },
+  { name: "Bolton", latitude: 53.5769, longitude: -2.4282 },
+  { name: "Warrington", latitude: 53.39, longitude: -2.597 },
+  { name: "Stockport", latitude: 53.4083, longitude: -2.1494 },
+  { name: "Aberystwyth", latitude: 52.414, longitude: -4.081 },
+  { name: "Llandudno", latitude: 53.3241, longitude: -3.8272 },
+  { name: "Caernarfon", latitude: 53.139, longitude: -4.276 },
+  { name: "Brecon", latitude: 51.946, longitude: -3.392 },
+  { name: "St Andrews", latitude: 56.3398, longitude: -2.7967 },
+  { name: "Dunfermline", latitude: 56.072, longitude: -3.452 },
+  { name: "Elgin", latitude: 57.649, longitude: -3.316 },
+  { name: "Thurso", latitude: 58.596, longitude: -3.525 },
+  { name: "Galashiels", latitude: 55.618, longitude: -2.8 },
+  { name: "Armagh", latitude: 54.35, longitude: -6.656 },
+  { name: "Lisburn", latitude: 54.51, longitude: -6.058 },
+  { name: "Coleraine", latitude: 55.133, longitude: -6.667 },
 ];
 
 // Roughly how wide a label renders per character at the target font size —
@@ -1853,6 +1911,12 @@ document.addEventListener("click", (e) => {
   const delta = nav.dataset.clusterNav === "next" ? 1 : -1;
   state.selectedCardIndex = (state.selectedCardIndex + delta + count) % count;
   renderMapSelection();
+  // The carousel can step to a property plotted under a different marker or
+  // cluster than the one currently highlighted (e.g. a mixed cluster split
+  // across two on-screen icons), so the active marker needs redrawing here
+  // too — renderMapSelection() alone only updates the card's text/buttons.
+  const svg = el.ukMap?.querySelector(".uk-map-svg");
+  if (svg) drawMapMarkers(svg);
 });
 
 el.listTab?.addEventListener("click", () => toggleView("list"));

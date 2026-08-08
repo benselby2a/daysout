@@ -265,6 +265,20 @@ independent, so a quick double-tap on empty space both dismisses any open
 card *and* zooms, rather than the first tap's dismissal blocking the second
 tap's zoom from being recognised.
 
+Stepping the carousel (`data-cluster-nav`) redraws the markers
+(`drawMapMarkers(svg)`), not just the card text — `active` membership is
+computed from `state.selectedPropertyIds[state.selectedCardIndex]` at draw
+time (see `drawMapMarkers()`), so without a redraw on every nav click the
+highlighted marker stayed stuck on whichever one was active when the cluster
+was first tapped while the card itself paged through every member. This is
+easiest to see with a cluster whose members land under two different
+on-screen icons after `zoomToSeparate()` (e.g. a same-group pair still
+merged plus one singleton) — paging "next" onto the singleton left the pair
+highlighted instead. The card-nav click handler lives at the top level
+(`document.addEventListener`, outside `wireMapInteractions()`'s closure), so
+it re-finds the svg via `el.ukMap.querySelector(".uk-map-svg")` rather than
+closing over the local `svg` variable.
+
 Marker fill colour is set inline per-element (`markerFillColor()`), not
 through a CSS class, since it depends on the specific property's institution:
 visited renders in that institution's full colour, unvisited renders as
@@ -288,7 +302,7 @@ one. Because colour is set inline, the old `.map-marker.visited`/`.unvisited`
 CSS rules were removed entirely — reintroducing class-based fill rules would
 silently override the inline colour via CSS cascade.
 
-The map also carries a fixed set of ~133 UK cities and market towns
+The map also carries a fixed set of 187 UK cities and market towns
 (`UK_CITIES`, `drawCityLabels()`) as muted, non-interactive background
 landmarks. The original ~20 were just the major cities, spread across all
 four nations rather than clustered in England (which has more big cities);
@@ -300,11 +314,17 @@ essentially one per property — so the actual target is every property within
 a greedy set-cover script (farthest/densest-point-first, see git history)
 against the seed data rather than picked by eye. A further batch after that
 just filled out some notable cities/towns the first two passes happened to
-miss (Exeter, Norwich, Perth, Newry, …), not chasing exhaustive coverage.
-They live in their own `.map-cities` group between the nation outlines and
+miss (Exeter, Norwich, Perth, Newry, …), not chasing exhaustive coverage. A
+later batch (after the SE England churches were added) closed the one real
+20-mile gap the churches migration reintroduced coverage math for
+(properties near Berwick-upon-Tweed) and added ~50 more towns generally,
+including two cathedral cities the churches highlighted as missing from the
+landmark set entirely (Canterbury, Chichester) despite each having its
+cathedral as a plotted property. They live in their own `.map-cities` group
+between the nation outlines and
 the property markers, are never counted in `clusterPointsNoOverlap()`, and
 use the same constant-on-screen-size approach (`screenPx()`) as everything
-else on the map. At this density, showing all ~133 unconditionally used to
+else on the map. At this density, showing all of them unconditionally used to
 make labels overlap each other illegibly in the densest regions (South-East
 England)
 when zoomed out. `drawCityLabels()` now skips drawing a city (dot and label

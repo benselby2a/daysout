@@ -28,9 +28,10 @@ Cadw, RHS gardens, independent houses, and historic churches and cathedrals.
   with its × or by tapping anywhere else on the map. A pulsing dot marks
   your current location once known, or a house icon at London stands in for
   it until then. Major cities and market
-  towns are shown as muted background labels for orientation, spread across
-  all four nations and picked so that every property in the seed data has
-  one within about 20 miles, not just the properties near a big city — at
+  towns (187 of them) are shown as muted background labels for orientation,
+  spread across all four nations and picked so that every property in the
+  seed data has one within about 20 miles, not just the properties near a
+  big city — at
   full-UK zoom only as many are shown as fit without overlapping, and more
   appear as you zoom in. Motorways and A-roads are drawn as muted background
   lines for the same reason — ground context, not
