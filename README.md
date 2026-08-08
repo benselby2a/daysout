@@ -2,7 +2,7 @@
 
 Track visits to historic houses and gardens around the UK — National Trust,
 English Heritage, National Trust for Scotland, Historic Environment Scotland,
-Cadw, RHS gardens and independent houses.
+Cadw, RHS gardens, independent houses, and historic churches and cathedrals.
 
 - **List view** with a free-text search, a Visited toggle (All / Visited / Not
   visited) and a Sort toggle (A–Z / Nearest to me), each a single button that
@@ -49,7 +49,7 @@ In the Supabase SQL editor, run the SQL in:
 - `supabase.sql`
 
 That creates the `daysout` schema (a `properties` table and a `visits` table),
-sets up row level security, and seeds 405 starter properties.
+sets up row level security, and seeds 502 starter properties.
 
 Then, in **Project Settings > API > Exposed schemas**, add `daysout` so
 PostgREST can see it. Without this the app loads but every query fails.
@@ -104,6 +104,16 @@ your data.
   property still stores and shows its exact association, so an NTS castle
   stays distinguishable from a National Trust one. Change the grouping in
   `INSTITUTION_GROUPS` in `main.js`; no migration is needed.
+- **Historic churches.** 97 parish churches and cathedrals across Kent, East
+  Sussex and West Sussex, added from a user-supplied reference app rather than
+  scraped or web-searched. They get their own "Historic Church"
+  institution/group (its own progress card, filter, and map colour) rather
+  than folding into an existing body, since they aren't National Trust /
+  English Heritage / RHS / Historic Houses members. The source data's
+  construction date, opening hours, highlight note and longer description are
+  concatenated into the `notes` field rather than given their own columns —
+  consistent with this app's general approach of not migrating the schema for
+  one category's extra metadata.
 - A property needs both a latitude and a longitude to appear on the map. The map
   view says how many filtered places are missing coordinates.
 - Visits are still stored as rows in `daysout.visits` under the hood (the

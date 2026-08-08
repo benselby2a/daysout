@@ -67,6 +67,21 @@ if the grouping ever changes. Filter state stores group keys, and
 key as a literal institution name so hand-typed values and pre-grouping saved
 filters keep working.
 
+The `Historic Church` institution (97 SE England parish churches/cathedrals,
+`supabase/migrations/20260808090000_add_se_england_churches.sql`) is its own
+`INSTITUTION_GROUPS` entry with its own colour (`--inst-church`), not folded
+into an existing group — these aren't National Trust/English Heritage/RHS/
+Historic Houses members, so grouping them under one of those cards would
+misrepresent membership. The source (a user-supplied standalone reference
+app, not scraped) has five metadata fields per church — `built`, `era`,
+`open`, `note`, `desc` — with no matching columns here; per the
+don't-change-the-schema stance above, `built` + `note` + `desc` (and `open`,
+where present — only the four cathedrals had it) are concatenated into the
+existing `notes` field at migration time, and `era` is dropped entirely: the
+map colours by institution group, not construction date, so era has no
+display surface in this app and adding one would be a second, parallel
+colouring scheme running alongside the existing group-colour one.
+
 `data/uk.json` holds the four UK nation outlines, extracted from Natural Earth
 1:10m `admin_0_map_subunits` (public domain), simplified and stripped of tiny
 islands. The app projects it with an Albers equal-area conic tuned to the UK

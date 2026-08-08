@@ -46,6 +46,7 @@
   --inst-rhs: #e0399f;
   --inst-rhsp: #d4589e;
   --inst-hh: #8e3fae;
+  --inst-church: #b8860b;
 }
 
 [data-theme="dark"] {
@@ -91,6 +92,7 @@
   --inst-rhs: #f27ec5;
   --inst-rhsp: #f08cc4;
   --inst-hh: #c98ee0;
+  --inst-church: #e0b64a;
 }
 
 * { box-sizing: border-box; }

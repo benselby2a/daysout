@@ -57,6 +57,7 @@ const INSTITUTIONS = [
   { name: "RHS Garden", varName: "--inst-rhs" },
   { name: "RHS Partner Garden", varName: "--inst-rhsp" },
   { name: "Historic Houses", varName: "--inst-hh" },
+  { name: "Historic Church", varName: "--inst-church" },
 ];
 
 const INSTITUTION_BY_NAME = new Map(INSTITUTIONS.map((i) => [i.name, i]));
@@ -89,6 +90,12 @@ const INSTITUTION_GROUPS = [
     label: "Historic Houses",
     varName: "--inst-hh",
     members: ["Historic Houses"],
+  },
+  {
+    key: "Historic Church",
+    label: "Historic Churches",
+    varName: "--inst-church",
+    members: ["Historic Church"],
   },
 ];
 
