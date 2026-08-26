@@ -672,10 +672,13 @@ button.ghost {
   display: inline;
 }
 
+/* Slightly stronger than the first pass (0.7 / 0.45) so the minor network
+   actually reads once it's on, but still stepped below .map-road-primary's
+   1.0 width so the road hierarchy stays legible at a glance. */
 .map-road-minor {
   stroke: var(--road-minor);
-  stroke-width: 0.7;
-  opacity: 0.45;
+  stroke-width: 0.85;
+  opacity: 0.55;
 }
 
 /* Fill is set per-element inline (institution colour, lighter for

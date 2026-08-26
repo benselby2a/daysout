@@ -148,12 +148,32 @@ Both gates key off `currentMapZoom` (full-UK extent = 1, higher zoomed in),
 which is *not* the same thing as `currentPxPerSvgUnit` — that one also moves
 with the device's screen width, whereas "how much detail should I draw" is
 purely a question of how much of the UK is on screen. `MINOR_ROAD_MIN_ZOOM`
-is 3 rather than 4 on purpose: the map's own default opening view works out
-at x4.07 on every viewport tried (it follows `DEFAULT_MAP_RADIUS_MILES`, not
-the screen), so a threshold of 4 had the roads switching on 1.7% above where
-the map opens — close enough that later nudging the default radius would
-silently flip the opening view to roadless with nothing looking obviously
-broken.
+has come down twice. First 4 → 3: the map's own default opening view works
+out at x4.07 on every viewport tried (it follows `DEFAULT_MAP_RADIUS_MILES`,
+not the screen), so a threshold of 4 had the roads switching on 1.7% above
+where the map opens — close enough that later nudging the default radius
+would silently flip the opening view to roadless with nothing looking
+obviously broken. Then 3 → 2, on a request for more road detail, once it
+was established that **Natural Earth has no more UK roads to give** (see
+below) — spreading the ones we have over more of the zoom range was the only
+lever left. 2 is the floor worth having: at x1 the 195 minor lines muddy the
+nation outlines, which is the clutter the gate exists to prevent.
+
+Do not go looking for more Natural Earth roads without reading this first.
+All 573 in-bbox non-ferry parts have been enumerated: 468 are in
+`data/uk-roads.json` and the 105 excluded are *every one* in Ireland,
+France, or the Isle of Man (Irish N-roads, French D/E-routes) — there are no
+wrongly-dropped UK segments left to recover. Genuinely denser roads need
+OpenStreetMap, and from this sandbox Overpass (two mirrors), Geofabrik,
+openstreetmap.org, geonames.org and `api.os.uk` all return 403 at the
+proxy, npm/PyPI carry only tooling, and the GitHub search API is blocked by
+the session's repo scoping. `raw.githubusercontent.com` works (it is how
+Natural Earth and the village gazetteer arrived), so a pre-processed
+OSM roads file published there, or one committed by hand, is the realistic
+route. Whatever the source, it has to be filtered down to near-property
+areas the way the villages are: every road path is serialised into the DOM
+once at shell build, so a full OSM minor-road network (tens of thousands of
+ways) is not droppable in wholesale.
 
 `drawCityLabels()` also culls anything outside `currentMapViewBox` (plus a
 margin). That barely mattered when it was 187 towns, but with ~1,470

@@ -37,7 +37,7 @@ Cadw, RHS gardens, independent houses, and historic churches and cathedrals.
   lines for the same reason — ground context, not
   another data layer to read. **Zooming in adds detail rather than showing
   it all at once**: minor roads join the motorways and A-roads once you're
-  past roughly a third of the UK, and around 1,470 villages and small
+  past about half the UK, and around 1,470 villages and small
   settlements (each within 8 miles of a property, so they're useful
   landmarks rather than filler) appear at closer zooms again, drawn smaller
   and lighter than the towns. Zoomed out, none of that is drawn, so the
@@ -92,7 +92,7 @@ your data.
 - `SUPABASE_URL` and `SUPABASE_ANON_KEY` at the top of `main.js` currently point
   at the same Supabase project as the other apps, using a separate `daysout`
   schema to keep the tables apart. Change them if you want a different project.
-- **Seed data caveats.** The 405 starter properties are a hand-built list, not an
+- **Seed data caveats.** The 502 starter properties are a hand-built list, not an
   official export — the primary sources (historichouses.org, rhs.org.uk,
   Wikipedia) block direct fetches from this environment, so the Historic Houses
   and RHS Partner Garden entries in particular were compiled from web search
@@ -144,9 +144,12 @@ your data.
 - `data/uk-roads.json` holds motorways, A-roads and minor roads (468
   segments), also from Natural Earth (`ne_10m_roads`, public domain),
   filtered to the UK and bundled locally the same way. The minor roads are
-  only drawn once the map is zoomed in past about a third of the UK. If it
+  only drawn once the map is zoomed in past about half the UK. If it
   fails to load, the map still works — roads are decorative background
-  context, not required.
+  context, not required. This is as detailed as Natural Earth gets: every UK
+  road it holds is already in the file, and everything it leaves out is in
+  Ireland, France or the Isle of Man. A denser network would have to come
+  from OpenStreetMap.
 - `data/uk-villages.json` holds 1,470 villages and small settlements, drawn
   only at closer zoom levels. Each is within 8 miles of a seed property (so
   they read as landmarks near somewhere you might visit) and at least 2.5

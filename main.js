@@ -636,13 +636,19 @@ let currentMapViewBox = null;
 // held back much further, since each one costs a piece of readable text and
 // there are ~1,470 of them.
 //
-// 3 rather than 4 deliberately: the map's own default opening view works out
-// at x4.07 on every viewport tried (it follows DEFAULT_MAP_RADIUS_MILES, not
-// the screen size), so a threshold of 4 left the roads switching on 1.7%
-// above where the map opens — close enough that nudging the default radius
-// later would silently flip the opening view to roadless without anything
-// looking obviously wrong.
-const MINOR_ROAD_MIN_ZOOM = 3;
+// The minor-road threshold has come down twice, both times deliberately.
+// First from 4 to 3, because the map's own default opening view works out at
+// x4.07 on every viewport tried (it follows DEFAULT_MAP_RADIUS_MILES, not the
+// screen size), so 4 had the roads switching on 1.7% above where the map
+// opens — close enough that nudging the default radius later would silently
+// flip the opening view to roadless. Then from 3 to 2, to get more road
+// detail on screen sooner: Natural Earth has no further UK roads to add
+// (every segment it holds is already in data/uk-roads.json), so showing the
+// ones we have across more of the zoom range is the way to make the network
+// read as a network. 2 is the floor worth having — at x1, the full-UK reset
+// view, these 195 extra lines are dense enough to muddy the nation outlines,
+// which is the clutter the gate exists to prevent in the first place.
+const MINOR_ROAD_MIN_ZOOM = 2;
 const VILLAGE_MIN_ZOOM = 12;
 
 // Where the map opens by default: a radius around the user's location, or
