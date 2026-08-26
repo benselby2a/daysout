@@ -37,6 +37,7 @@
   --map-sea: #eaf1f7;
   --road-motorway: #6b8fb5;
   --road-primary: #b58a5a;
+  --road-minor: #9aa4ae;
 
   --inst-nt: #2f7d51;
   --inst-nts: #2f6d9e;
@@ -83,6 +84,7 @@
   --map-sea: #141822;
   --road-motorway: #7ea3cc;
   --road-primary: #c99f6e;
+  --road-minor: #7c8894;
 
   --inst-nt: #56b984;
   --inst-nts: #63a6d8;
@@ -659,6 +661,23 @@ button.ghost {
   opacity: 0.55;
 }
 
+/* Minor roads are extra detail for zoomed-in views only — hidden by default
+   and switched on from applyView() once enough of the map is magnified for
+   them to read as roads rather than as static (see MINOR_ROAD_MIN_ZOOM). */
+.map-roads-minor {
+  display: none;
+}
+
+.map-roads-minor.detail-on {
+  display: inline;
+}
+
+.map-road-minor {
+  stroke: var(--road-minor);
+  stroke-width: 0.7;
+  opacity: 0.45;
+}
+
 /* Fill is set per-element inline (institution colour, lighter for
    not-visited) rather than through a class, since it depends on which
    institution the specific property belongs to. */
@@ -745,6 +764,19 @@ button.ghost {
   text-anchor: middle;
   opacity: 0.7;
   user-select: none;
+}
+
+/* Villages sit a rung below the towns in the same visual language — same
+   colour, just lighter and slightly smaller (the font size itself is set
+   per-element, since it has to stay a constant on-screen size) so a town
+   still reads as the more prominent landmark where both are on screen. */
+.map-city-village circle {
+  opacity: 0.35;
+}
+
+.map-city-village text {
+  font-weight: 500;
+  opacity: 0.5;
 }
 
 .uk-map-tooltip {

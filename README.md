@@ -35,7 +35,13 @@ Cadw, RHS gardens, independent houses, and historic churches and cathedrals.
   full-UK zoom only as many are shown as fit without overlapping, and more
   appear as you zoom in. Motorways and A-roads are drawn as muted background
   lines for the same reason — ground context, not
-  another data layer to read
+  another data layer to read. **Zooming in adds detail rather than showing
+  it all at once**: minor roads join the motorways and A-roads once you're
+  past roughly a third of the UK, and around 1,470 villages and small
+  settlements (each within 8 miles of a property, so they're useful
+  landmarks rather than filler) appear at closer zooms again, drawn smaller
+  and lighter than the towns. Zoomed out, none of that is drawn, so the
+  full-UK view stays as clean as it was
 - **Mark a place as visited or not**, a single toggle — no dates, notes, or
   visit history to manage
 - **Add your own properties**, capturing name, location, institution(s),
@@ -135,7 +141,18 @@ your data.
   dataset (public domain), simplified and trimmed of very small islands. It is
   bundled locally so the map needs no external requests. The app draws it with
   an Albers equal-area conic projection tuned to the UK.
-- `data/uk-roads.json` holds motorways and A-roads (274 segments), also from
-  Natural Earth (`ne_10m_roads`, public domain), filtered to the UK and
-  bundled locally the same way. If it fails to load, the map still works —
-  roads are decorative background context, not required.
+- `data/uk-roads.json` holds motorways, A-roads and minor roads (468
+  segments), also from Natural Earth (`ne_10m_roads`, public domain),
+  filtered to the UK and bundled locally the same way. The minor roads are
+  only drawn once the map is zoomed in past about a third of the UK. If it
+  fails to load, the map still works — roads are decorative background
+  context, not required.
+- `data/uk-villages.json` holds 1,470 villages and small settlements, drawn
+  only at closer zoom levels. Each is within 8 miles of a seed property (so
+  they read as landmarks near somewhere you might visit) and at least 2.5
+  miles from its neighbours and from any of the 187 named towns, so they
+  don't pile up. Same fail-soft loading as the roads. The coordinates come
+  from a GeoNames-derived gazetteer of places with a population of 500 or
+  more — GeoNames data is licensed
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), unlike the
+  public-domain Natural Earth data used elsewhere on the map.

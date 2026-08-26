@@ -88,7 +88,8 @@ islands. The app projects it with an Albers equal-area conic tuned to the UK
 (`projectAlbers`); the same projection places property markers, so it is the
 single source of truth for map geometry.
 
-`data/uk-roads.json` holds motorways and A-roads (274 line segments), also
+`data/uk-roads.json` holds motorways, A-roads and minor roads (468 line
+segments), also
 from Natural Earth (`ne_10m_roads`, filtered to a UK bounding box and
 cross-checked against `data/uk.json`'s land polygons so segments in nearby
 countries — Ireland, France — aren't included). Fetched via
@@ -103,6 +104,61 @@ already use. Rendered in their own `.map-roads` group between the nation
 fill and the city labels/property markers so roads read as ground context
 underneath everything else, and are `pointer-events: none` throughout, same
 as city labels.
+
+Natural Earth's three UK road classes map to `kind` as `Major Highway` →
+`motorway`, `Secondary Highway` → `primary`, `Road` → `minor`; ferry routes
+are dropped (they'd draw straight lines across open water). Two traps when
+rebuilding this file: the source mixes `LineString` and **`MultiLineString`**
+geometries, and skipping the latter silently loses real roads (the A2070
+across Romney Marsh is one whole multi-part feature); and the "is it in the
+UK" test has to be a *fraction* of points inside the land polygons, not
+"any point" — the Irish N-roads reach far enough over the simplified NI
+border that ~40% of N2's points land inside it. A ≥50% threshold keeps every
+UK road while dropping N2/N3/N15/N16 and the Irish stretch of E1. Adding a
+distance tolerance to the land test was tried to rescue coastal roads and
+only ever rescued Irish ones, so it isn't used. E-numbered refs that survive
+(E15, E30, …) are genuine — the UK is part of the E-road network on paper,
+so Natural Earth labels some UK motorways that way.
+
+The minor roads live in a **separate** `.map-roads.map-roads-minor` group
+drawn before the main one (so they render underneath), shown only past
+`MINOR_ROAD_MIN_ZOOM`. Gating is a single `classList.toggle("detail-on")` on
+that one `<g>` from `applyView()` — a class rather than the `hidden`
+attribute, which isn't reliably honoured on SVG elements the way it is on
+HTML ones — so the extra detail costs nothing to leave in the DOM while
+zoomed out, and no path is ever re-serialised on a zoom step.
+
+`data/uk-villages.json` holds 1,472 villages/small settlements shown only
+past `VILLAGE_MIN_ZOOM`, loaded by `loadUkVillages()` with the same
+fail-soft contract as the roads. Unlike everything else on the map this is
+**not** Natural Earth — Natural Earth's populated-places set has only 57 GB
+entries, the smallest being Lerwick at ~6,600 people, so it's useless for
+villages. These come from a GeoNames-derived gazetteer of places with
+population ≥500, which is **CC BY 4.0, not public domain** — the attribution
+in the README needs to stay. (geonames.org itself is blocked by the sandbox
+proxy; the data was taken from a GitHub mirror.) Selection is deliberate
+rather than "every village in Britain": each is within 8 miles of a seed
+property, ≥2.5 miles from any already-kept village, and ≥2.5 miles from any
+`UK_CITIES` town, picked nearest-to-a-property first — so they read as
+landmarks near somewhere you'd actually visit. Regenerating them after
+adding properties is reasonable; the thresholds are in the build script in
+the scratchpad, not in the app.
+
+Both gates key off `currentMapZoom` (full-UK extent = 1, higher zoomed in),
+which is *not* the same thing as `currentPxPerSvgUnit` — that one also moves
+with the device's screen width, whereas "how much detail should I draw" is
+purely a question of how much of the UK is on screen. `MINOR_ROAD_MIN_ZOOM`
+is 3 rather than 4 on purpose: the map's own default opening view works out
+at x4.07 on every viewport tried (it follows `DEFAULT_MAP_RADIUS_MILES`, not
+the screen), so a threshold of 4 had the roads switching on 1.7% above where
+the map opens — close enough that later nudging the default radius would
+silently flip the opening view to roadless with nothing looking obviously
+broken.
+
+`drawCityLabels()` also culls anything outside `currentMapViewBox` (plus a
+margin). That barely mattered when it was 187 towns, but with ~1,470
+villages a deep zoom otherwise put every one of them in the DOM as a `<g>`
+with real text while only a handful were on screen.
 
 The map opens zoomed to `DEFAULT_MAP_RADIUS_MILES` around the user's location
 if already known (`state.userLocation`, e.g. from an earlier "Nearest to me"),
@@ -329,9 +385,13 @@ make labels overlap each other illegibly in the densest regions (South-East
 England)
 when zoomed out. `drawCityLabels()` now skips drawing a city (dot and label
 together, not just the text) whenever its approximate on-screen label box
-would overlap one already placed, checked in `UK_CITIES`' array order — the
+would overlap one already placed, checked in list order — the
 ~20 major cities are listed first, so they win any conflict over the market
-towns appended after them. There's no real text-metrics call available
+towns appended after them, and both win over the villages, which are
+appended last (and only once past `VILLAGE_MIN_ZOOM`). Villages render at
+0.85× the town font size with a smaller dot and lower opacity
+(`.map-city-village`), so where both are on screen a town still reads as the
+more prominent landmark. There's no real text-metrics call available
 without a canvas, so label width is approximated as `name.length *
 CITY_LABEL_CHAR_WIDTH_PX` — good enough to decide "would these collide?", not
 meant to be pixel-perfect typesetting. Recomputed on every zoom step for the
@@ -397,7 +457,21 @@ the given coordinates) — dispatching on the `<svg>` root to simulate a marker
 tap silently tests nothing, since `e.target` never becomes a `.map-marker`.
 Dispatch on the marker element itself — for a cluster, dispatch on the
 `.map-marker-cluster` `<g>`, not a nested `<circle>`/`<text>`, since
-`data-property-ids` lives on the group. Worth exercising after UI changes: the
+`data-property-ids` lives on the group.
+
+Zooming in a test has two more traps. `page.mouse.wheel()` does not reach the
+map's `wheel` handler (which is bound on the `<svg>` with `passive: false`) —
+dispatch a `WheelEvent` at the svg directly instead, with `clientX`/`clientY`
+set to where you want to zoom. And the on-screen `+`/`−` buttons zoom towards
+the *map centre*, which is empty sea/countryside, so a sweep driven by them
+bottoms out at zero labels and tells you nothing about density; anchor the
+zoom on a marker in a genuinely populated region (the Weald, say) if what
+you're checking is how much detail appears. Note also that at full-UK zoom
+the capped clusters legitimately overlap, so Playwright's actionability check
+will refuse a `.click()` on one as "intercepted" — `{ force: true }` is the
+right answer there, not a bug.
+
+Worth exercising after UI changes: the
 list filters, the progress cards' dual role as the institution filter (picking
 one, picking "All places" to clear, the `aria-checked`/`role="radio"` state),
 the map (marker count should match the filtered rows, the default zoom framing
@@ -410,11 +484,15 @@ every `.map-marker-cluster`) even in the densest mock data, no two rendered
 markers/clusters should ever overlap regardless of zoom level *except* where
 the size cap forced it (checking every pairwise `cx`/`cy`/`r` on the
 rendered `<circle>`s is a good way to confirm this directly rather than
-eyeballing a screenshot), no two city/town labels should overlap at any zoom
+eyeballing a screenshot), no two settlement labels should overlap at any zoom
 level either (same pairwise check, but on each `.map-city text`'s real
 `getBoundingClientRect()`, not the approximate width `drawCityLabels()` uses
-internally to decide what to draw) and more of them should appear as you
-zoom in, hovering a marker/cluster
+internally to decide what to draw — villages included, once zoomed past
+`VILLAGE_MIN_ZOOM`) and more of them should appear as you
+zoom in, the zoom-gated detail should switch on and off at the right depths
+(no `.map-city-village` and a hidden `.map-roads-minor` group at reset zoom;
+both present a few zoom steps in, with the motorways/A-roads still drawn
+throughout), hovering a marker/cluster
 should show only the custom tooltip and never a native one, marker colour
 should track the property's institution *group* (not each exact
 institution's own colour — a National Trust for Scotland property should

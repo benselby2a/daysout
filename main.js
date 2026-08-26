@@ -3,6 +3,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_xlNQ_QudJNUlMLjWpr0iJA_YgO87tox";
 
 const UK_MAP_URL = "./data/uk.json";
 const UK_ROADS_URL = "./data/uk-roads.json";
+const UK_VILLAGES_URL = "./data/uk-villages.json";
 const FILTER_STORAGE_KEY = "daysout.filters";
 const VIEW_STORAGE_KEY = "daysout.view";
 
@@ -166,6 +167,7 @@ const state = {
   view: "list",
   mapFeatures: null,
   mapRoads: null,
+  mapVillages: null,
   mapDefaultCenter: null,
   // Ordered by distance to the last tap (closest first); more than one entry
   // means a cluster of nearby markers, browsed via selectedCardIndex.
@@ -614,6 +616,35 @@ function screenPx(px) {
   return px / currentPxPerSvgUnit;
 }
 
+// How far the map is zoomed in, as a multiple of the full-UK extent: 1 at the
+// reset-zoom view, higher the further in you go (clampView caps it at 5000).
+// Distinct from currentPxPerSvgUnit, which is about *physical* size and so
+// also moves with the device's screen width — this one is purely "how much of
+// the UK is on screen", which is the right question for deciding how much
+// detail to draw. Used to gate the minor roads and the village labels, both of
+// which would be unreadable clutter at full-UK zoom.
+let currentMapZoom = 1;
+
+// The viewBox currently on screen, so label drawing can skip whatever is
+// scrolled off it. Matters much more since the villages arrived: at a deep
+// zoom nearly all ~1,470 of them sit outside the view, and without this every
+// one still became a <g> with real text in the DOM.
+let currentMapViewBox = null;
+
+// Minor roads join the motorways/A-roads at a mild zoom (they're thin
+// background lines, so they can afford to come in early); village labels are
+// held back much further, since each one costs a piece of readable text and
+// there are ~1,470 of them.
+//
+// 3 rather than 4 deliberately: the map's own default opening view works out
+// at x4.07 on every viewport tried (it follows DEFAULT_MAP_RADIUS_MILES, not
+// the screen size), so a threshold of 4 left the roads switching on 1.7%
+// above where the map opens — close enough that nudging the default radius
+// later would silently flip the opening view to roadless without anything
+// looking obviously wrong.
+const MINOR_ROAD_MIN_ZOOM = 3;
+const VILLAGE_MIN_ZOOM = 12;
+
 // Where the map opens by default: a radius around the user's location, or
 // around London if location isn't already known. This only sets the starting
 // view — the full UK is still reachable via the zoom-out control.
@@ -722,13 +753,29 @@ async function loadUkRoads() {
   }
 }
 
+// Villages/small settlements, only ever drawn zoomed in (see
+// VILLAGE_MIN_ZOOM). Same fail-soft contract as the roads: a plain array,
+// empty on any error, so the map still works without them.
+async function loadUkVillages() {
+  try {
+    const res = await fetch(UK_VILLAGES_URL);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    const villages = await res.json();
+    return Array.isArray(villages) ? villages : [];
+  } catch (err) {
+    console.error("[Days Out] Failed to load UK villages:", err);
+    return [];
+  }
+}
+
 let ukMapPromise = null;
 function ensureUkMapLoaded() {
   if (!ukMapPromise) {
-    ukMapPromise = Promise.all([loadUkMap(), loadUkRoads()])
-      .then(([features, roads]) => {
+    ukMapPromise = Promise.all([loadUkMap(), loadUkRoads(), loadUkVillages()])
+      .then(([features, roads, villages]) => {
         state.mapFeatures = features;
         state.mapRoads = roads;
+        state.mapVillages = villages;
         state.mapDefaultCenter = resolveMapDefaultCenter();
         mapTransform = computeMapTransform(features);
         renderMap();
@@ -1138,20 +1185,26 @@ const UK_CITIES = [
 const CITY_LABEL_CHAR_WIDTH_PX = 5.2;
 const CITY_LABEL_FONT_PX = 9;
 
-// Small muted dot + label per city, always redrawn alongside the property
-// markers so the label/dot stay a constant on-screen size regardless of
-// zoom — same approach as drawLocationMarker(). Purely decorative context:
+// Small muted dot + label per settlement, always redrawn alongside the
+// property markers so the label/dot stay a constant on-screen size regardless
+// of zoom — same approach as drawLocationMarker(). Purely decorative context:
 // no data-property-ids, no pointer handling, never counted in clusters.
 //
-// Labels overlap at full-UK zoom purely because there isn't room for all
-// ~106 at once — rather than let them visually collide (illegible), each
-// city is only drawn if its approximate on-screen label box doesn't overlap
-// one already placed, checked in UK_CITIES' array order so the ~20 major
-// cities (listed first) win any conflict over the market towns appended
-// after them. Recomputed on every call (including every zoom step, from
-// applyView()), since whether two labels are "too close" is a screen-pixel
-// question that eases as you zoom in — a city hidden at full zoom-out can
-// reappear once its neighbours are far enough apart on screen.
+// Labels overlap at full-UK zoom purely because there isn't room for all of
+// them at once — rather than let them visually collide (illegible), each is
+// only drawn if its approximate on-screen label box doesn't overlap one
+// already placed, checked in list order so the ~20 major cities (listed
+// first) win any conflict over the market towns appended after them, and
+// towns in turn win over villages. Recomputed on every call (including every
+// zoom step, from applyView()), since whether two labels are "too close" is a
+// screen-pixel question that eases as you zoom in — a place hidden at full
+// zoom-out can reappear once its neighbours are far enough apart on screen.
+//
+// The villages are additionally gated on VILLAGE_MIN_ZOOM rather than left to
+// the overlap check alone: there are ~1,470 of them, so at low zoom the check
+// would spend most of its work rejecting villages that stand no chance, and
+// the few that did squeeze into empty countryside would read as noise next to
+// the towns rather than as useful landmarks.
 function drawCityLabels(svg) {
   const group = svg.querySelector(".map-cities");
   if (!group) return;
@@ -1160,25 +1213,39 @@ function drawCityLabels(svg) {
   const fontSize = screenPx(CITY_LABEL_FONT_PX);
   const halfHeight = fontSize * 0.6;
 
+  const villageFontSize = screenPx(CITY_LABEL_FONT_PX * 0.85);
+  const showVillages = currentMapZoom >= VILLAGE_MIN_ZOOM && Array.isArray(state.mapVillages);
+  const candidates = showVillages
+    ? [...UK_CITIES.map((c) => ({ place: c, village: false })), ...state.mapVillages.map((v) => ({ place: v, village: true }))]
+    : UK_CITIES.map((c) => ({ place: c, village: false }));
+
+  // A margin of a couple of labels' worth, so one near the edge isn't culled
+  // while part of it would still be on screen.
+  const cullMargin = screenPx(60);
+  const box = currentMapViewBox;
+
   const placed = [];
   const visible = [];
-  for (const city of UK_CITIES) {
-    const [x, y] = projectToMap(city.longitude, city.latitude);
-    const labelY = y - r - labelGap - fontSize / 2;
-    const halfWidth = screenPx((city.name.replace("~", "/").length * CITY_LABEL_CHAR_WIDTH_PX) / 2);
+  for (const { place, village } of candidates) {
+    const [x, y] = projectToMap(place.longitude, place.latitude);
+    if (box && (x < box.x - cullMargin || x > box.x + box.w + cullMargin || y < box.y - cullMargin || y > box.y + box.h + cullMargin)) continue;
+    const size = village ? villageFontSize : fontSize;
+    const labelY = y - r - labelGap - size / 2;
+    const halfWidth = screenPx((place.name.replace("~", "/").length * CITY_LABEL_CHAR_WIDTH_PX * (village ? 0.85 : 1)) / 2);
+    const halfH = village ? size * 0.6 : halfHeight;
     const overlapsPlaced = placed.some(
-      (other) => Math.abs(x - other.x) < halfWidth + other.halfWidth && Math.abs(labelY - other.labelY) < halfHeight + other.halfHeight
+      (other) => Math.abs(x - other.x) < halfWidth + other.halfWidth && Math.abs(labelY - other.labelY) < halfH + other.halfHeight
     );
     if (overlapsPlaced) continue;
-    placed.push({ x, labelY, halfWidth, halfHeight });
-    visible.push({ city, x, y });
+    placed.push({ x, labelY, halfWidth, halfHeight: halfH });
+    visible.push({ place, x, y, village, size });
   }
 
   group.innerHTML = visible
     .map(
-      ({ city, x, y }) => `<g class="map-city">
-      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}"></circle>
-      <text x="${x.toFixed(1)}" y="${(y - r - labelGap).toFixed(1)}" font-size="${fontSize.toFixed(2)}">${escapeHtml(city.name.replace("~", "/"))}</text>
+      ({ place, x, y, village, size }) => `<g class="map-city${village ? " map-city-village" : ""}">
+      <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(village ? r * 0.75 : r).toFixed(2)}"></circle>
+      <text x="${x.toFixed(1)}" y="${(y - r - labelGap).toFixed(1)}" font-size="${size.toFixed(2)}">${escapeHtml(place.name.replace("~", "/"))}</text>
     </g>`
     )
     .join("");
@@ -1237,16 +1304,19 @@ function renderMap() {
       })
       .join("");
 
-    // Motorways/A-roads, purely background context like the nation outlines
-    // — positions never change, so (unlike markers/cities) this is built
-    // once here rather than redrawn on every zoom step or filter change.
-    const roads = (state.mapRoads || [])
-      .map((f) => {
-        const d = "M" + f.geometry.coordinates.map(([lon, lat]) => projectToMap(lon, lat).map((v) => v.toFixed(1)).join(",")).join("L");
-        const kind = f.properties.kind === "motorway" ? "motorway" : "primary";
-        return `<path class="map-road map-road-${kind}" d="${d}"></path>`;
-      })
-      .join("");
+    // Motorways/A-roads/minor roads, purely background context like the
+    // nation outlines — positions never change, so (unlike markers/cities)
+    // this is built once here rather than redrawn on every zoom step or
+    // filter change. The minor roads go in their own group so the zoom-detail
+    // gate is a single display toggle on that <g> (see applyView), rather
+    // than re-serialising ~470 paths on every zoom step.
+    const roadPath = (f) => {
+      const d = "M" + f.geometry.coordinates.map(([lon, lat]) => projectToMap(lon, lat).map((v) => v.toFixed(1)).join(",")).join("L");
+      return `<path class="map-road map-road-${f.properties.kind}" d="${d}"></path>`;
+    };
+    const allRoads = state.mapRoads || [];
+    const minorRoads = allRoads.filter((f) => f.properties.kind === "minor").map(roadPath).join("");
+    const roads = allRoads.filter((f) => f.properties.kind !== "minor").map(roadPath).join("");
 
     el.ukMap.innerHTML = `
       <div class="uk-map-svg-wrap">
@@ -1267,6 +1337,7 @@ function renderMap() {
         </div>
         <svg class="uk-map-svg" viewBox="0 0 ${mapTransform.width} ${mapTransform.height.toFixed(1)}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of visited properties across the UK">
           <g class="map-nations">${nations}</g>
+          <g class="map-roads map-roads-minor">${minorRoads}</g>
           <g class="map-roads">${roads}</g>
           <g class="map-cities"></g>
           <g class="map-markers"></g>
@@ -1352,6 +1423,16 @@ function wireMapInteractions(svg) {
     if (rect.width > 0 && rect.height > 0) {
       currentPxPerSvgUnit = Math.min(rect.width / view.w, rect.height / view.h);
     }
+    // How much of the UK is on screen, which is what the detail gates key off
+    // (drawCityLabels reads it for the villages). Toggling the minor-road
+    // group is a single hidden/shown <g>, so the extra road detail costs
+    // nothing to keep in the DOM while it's zoomed out of range.
+    // (a class rather than the `hidden` attribute, which isn't reliably
+    // honoured on SVG elements the way it is on HTML ones)
+    currentMapZoom = baseView.w / view.w;
+    currentMapViewBox = { x: view.x, y: view.y, w: view.w, h: view.h };
+    const minorRoads = svg.querySelector(".map-roads-minor");
+    if (minorRoads) minorRoads.classList.toggle("detail-on", currentMapZoom >= MINOR_ROAD_MIN_ZOOM);
     // Clusters are zoom-dependent (whether two markers are "close enough to
     // merge" is a screen-pixel question), so every zoom step needs to redraw,
     // not just filter-driven renders. Panning alone doesn't change on-screen
