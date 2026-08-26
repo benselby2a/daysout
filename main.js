@@ -1191,6 +1191,15 @@ const UK_CITIES = [
 const CITY_LABEL_CHAR_WIDTH_PX = 5.2;
 const CITY_LABEL_FONT_PX = 9;
 
+// Half a label's height, as a multiple of its font size. A rendered text box
+// measures about 1.18x its font size, so 0.7 (= 1.4x total) is deliberately
+// generous. The slack is not cosmetic: the overlap check below runs on
+// full-precision coordinates, but the SVG is serialised with toFixed(1), so
+// two labels can drift up to ~0.1 units *relative to each other* after the
+// check has already passed them. A clearance thinner than that rounding
+// error is how a pair that the algorithm rejected still rendered touching.
+const LABEL_HALF_HEIGHT_FACTOR = 0.7;
+
 // Small muted dot + label per settlement, always redrawn alongside the
 // property markers so the label/dot stay a constant on-screen size regardless
 // of zoom — same approach as drawLocationMarker(). Purely decorative context:
@@ -1217,7 +1226,7 @@ function drawCityLabels(svg) {
   const r = screenPx(3);
   const labelGap = screenPx(5);
   const fontSize = screenPx(CITY_LABEL_FONT_PX);
-  const halfHeight = fontSize * 0.6;
+  const halfHeight = fontSize * LABEL_HALF_HEIGHT_FACTOR;
 
   const villageFontSize = screenPx(CITY_LABEL_FONT_PX * 0.85);
   const showVillages = currentMapZoom >= VILLAGE_MIN_ZOOM && Array.isArray(state.mapVillages);
@@ -1237,8 +1246,15 @@ function drawCityLabels(svg) {
     if (box && (x < box.x - cullMargin || x > box.x + box.w + cullMargin || y < box.y - cullMargin || y > box.y + box.h + cullMargin)) continue;
     const size = village ? villageFontSize : fontSize;
     const labelY = y - r - labelGap - size / 2;
-    const halfWidth = screenPx((place.name.replace("~", "/").length * CITY_LABEL_CHAR_WIDTH_PX * (village ? 0.85 : 1)) / 2);
-    const halfH = village ? size * 0.6 : halfHeight;
+    // Villages render at 0.85x the font size but their width is budgeted at
+    // the full per-character estimate anyway, i.e. ~18% of deliberate slack.
+    // CITY_LABEL_CHAR_WIDTH_PX is a per-character *average*, and a name that
+    // is mostly wide glyphs measures up to 12% over it (Remenham, Amersham,
+    // Chobham — 'm' and 'w' are the offenders). Scaling the estimate down by
+    // 0.85 as well spent that slack and let two long village labels touch,
+    // which is exactly the collision this check exists to prevent.
+    const halfWidth = screenPx((place.name.replace("~", "/").length * CITY_LABEL_CHAR_WIDTH_PX) / 2);
+    const halfH = village ? size * LABEL_HALF_HEIGHT_FACTOR : halfHeight;
     const overlapsPlaced = placed.some(
       (other) => Math.abs(x - other.x) < halfWidth + other.halfWidth && Math.abs(labelY - other.labelY) < halfH + other.halfHeight
     );

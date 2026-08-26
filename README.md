@@ -37,8 +37,8 @@ Cadw, RHS gardens, independent houses, and historic churches and cathedrals.
   lines for the same reason — ground context, not
   another data layer to read. **Zooming in adds detail rather than showing
   it all at once**: minor roads join the motorways and A-roads once you're
-  past about half the UK, and around 1,470 villages and small
-  settlements (each within 8 miles of a property, so they're useful
+  past about half the UK, and around 3,300 villages and small
+  settlements (each within 20 miles of a property, so they're useful
   landmarks rather than filler) appear at closer zooms again, drawn smaller
   and lighter than the towns. Zoomed out, none of that is drawn, so the
   full-UK view stays as clean as it was
@@ -150,11 +150,13 @@ your data.
   road it holds is already in the file, and everything it leaves out is in
   Ireland, France or the Isle of Man. A denser network would have to come
   from OpenStreetMap.
-- `data/uk-villages.json` holds 1,470 villages and small settlements, drawn
-  only at closer zoom levels. Each is within 8 miles of a seed property (so
-  they read as landmarks near somewhere you might visit) and at least 2.5
-  miles from its neighbours and from any of the 187 named towns, so they
-  don't pile up. Same fail-soft loading as the roads. The coordinates come
+- `data/uk-villages.json` holds 3,324 villages and small settlements, drawn
+  only at closer zoom levels. Each is within 20 miles of a seed property (so
+  they read as landmarks near somewhere you might visit) and at least 1.5
+  miles from its neighbours and 2.5 miles from any of the 187 named towns, so
+  they don't pile up. That is most of what the source can give — its ceiling
+  is 4,232, and anything smaller than that is below the gazetteer's
+  population-500 cut-off. Same fail-soft loading as the roads. The coordinates come
   from a GeoNames-derived gazetteer of places with a population of 500 or
   more — GeoNames data is licensed
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), unlike the

@@ -128,7 +128,7 @@ attribute, which isn't reliably honoured on SVG elements the way it is on
 HTML ones — so the extra detail costs nothing to leave in the DOM while
 zoomed out, and no path is ever re-serialised on a zoom step.
 
-`data/uk-villages.json` holds 1,472 villages/small settlements shown only
+`data/uk-villages.json` holds 3,324 villages/small settlements shown only
 past `VILLAGE_MIN_ZOOM`, loaded by `loadUkVillages()` with the same
 fail-soft contract as the roads. Unlike everything else on the map this is
 **not** Natural Earth — Natural Earth's populated-places set has only 57 GB
@@ -137,12 +137,26 @@ villages. These come from a GeoNames-derived gazetteer of places with
 population ≥500, which is **CC BY 4.0, not public domain** — the attribution
 in the README needs to stay. (geonames.org itself is blocked by the sandbox
 proxy; the data was taken from a GitHub mirror.) Selection is deliberate
-rather than "every village in Britain": each is within 8 miles of a seed
-property, ≥2.5 miles from any already-kept village, and ≥2.5 miles from any
+rather than "every village in Britain": each is within 20 miles of a seed
+property, ≥1.5 miles from any already-kept village, and ≥2.5 miles from any
 `UK_CITIES` town, picked nearest-to-a-property first — so they read as
 landmarks near somewhere you'd actually visit. Regenerating them after
 adding properties is reasonable; the thresholds are in the build script in
 the scratchpad, not in the app.
+
+Those thresholds started at 8 miles / 2.5 miles (1,472 kept) and were opened
+up on a request for more villages. The gazetteer's hard ceiling is 4,232 —
+every GB entry in it that isn't already a `UK_CITIES` town — so 3,324 is
+most of what this source can give; going further needs places below the
+population-500 cut, which means full GeoNames or OS Open Names, neither
+reachable from here. Raising the count is close to free at render time
+because `drawCityLabels()` culls to the viewport first, so the file grows
+but the on-screen work does not.
+
+The output is written in nearest-property-first order, *not* alphabetically.
+`drawCityLabels()` places in array order and the first one to claim a spot
+wins, so this order means a clash is resolved in favour of the village
+closest to somewhere you'd actually be going.
 
 Both gates key off `currentMapZoom` (full-UK extent = 1, higher zoomed in),
 which is *not* the same thing as `currentPxPerSvgUnit` — that one also moves
@@ -176,9 +190,21 @@ once at shell build, so a full OSM minor-road network (tens of thousands of
 ways) is not droppable in wholesale.
 
 `drawCityLabels()` also culls anything outside `currentMapViewBox` (plus a
-margin). That barely mattered when it was 187 towns, but with ~1,470
+margin). That barely mattered when it was 187 towns, but with ~3,300
 villages a deep zoom otherwise put every one of them in the DOM as a `<g>`
 with real text while only a handful were on screen.
+
+`LABEL_HALF_HEIGHT_FACTOR` (0.7, i.e. 1.4x the font size) is deliberately
+looser than the ~1.18x a text box actually measures. The overlap check runs
+on full-precision coordinates but the SVG is serialised with `toFixed(1)`,
+so two labels can drift ~0.1 units relative to each other *after* the check
+has cleared them — a clearance thinner than that rounding error is how a
+pair the algorithm rejected still rendered touching (Aston Clinton / Weston
+Turville, found once the village count went up). For the same reason a
+village's label width is budgeted at the full `CITY_LABEL_CHAR_WIDTH_PX`
+even though it renders at 0.85x: that constant is a per-character *average*,
+and a name of mostly wide glyphs (Remenham, Amersham) measures up to 12%
+over it.
 
 The map opens zoomed to `DEFAULT_MAP_RADIUS_MILES` around the user's location
 if already known (`state.userLocation`, e.g. from an earlier "Nearest to me"),
