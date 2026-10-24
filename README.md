@@ -85,7 +85,20 @@ under **Authentication > Users** in the Supabase dashboard.
 
 This is deliberately stricter than an anon-key-only setup: the anon key is
 published with the site, so on its own it gives no read or write access to
-your data.
+your data. The `anon` role also has no table privileges at all (see
+`supabase/migrations/20261024090000_revoke_anon_grants.sql`), so row level
+security is not the only thing keeping the published key out — both controls
+would have to fail together.
+
+**Everyone who can sign in sees the same list.** The policies are
+`using (true)` for the `authenticated` role, with no per-user column and no
+`auth.uid()` check, so any signed-in user can read, edit and delete every
+property and visit. This is intentional — it is a shared household list, not
+a per-account one. Worth knowing: Supabase authentication is *project*-wide
+and this project is shared with the sibling apps, so a user created for one
+of those can sign in here too and gets the same full access. If that ever
+stops being what you want, scope the policies by email
+(`auth.jwt() ->> 'email' in (...)`) — that needs no schema change.
 
 ## Notes
 
@@ -123,6 +136,11 @@ your data.
   one category's extra metadata.
 - A property needs both a latitude and a longitude to appear on the map. The map
   view says how many filtered places are missing coordinates.
+- **Website links only render for `http://` and `https://` values.** Anything
+  else — another scheme, or a bare `www.example.com` with no scheme — is still
+  stored and still shown in the edit form, but never becomes a clickable link.
+  A bare value would otherwise resolve relative to the site rather than the
+  web, and a `javascript:` value would run as script in the page.
 - Visits are still stored as rows in `daysout.visits` under the hood (the
   schema is unchanged), but the UI only ever exposes a visited/not-visited
   toggle — marking visited inserts one dateless, noteless row, marking

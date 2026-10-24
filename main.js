@@ -213,6 +213,27 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+// escapeHtml() above stops markup injection but not a dangerous URL *scheme*:
+// "javascript:alert(1)" contains none of the characters it escapes, so it
+// survives into href intact. The Add Property form doesn't catch it either —
+// an <input type="url"> treats it as a valid absolute URL and accepts it
+// (verified in Chromium). Today such a link happens to be inert because
+// these anchors carry target="_blank", which Chromium refuses to follow for
+// javascript: URLs — but that is incidental protection, and dropping
+// target="_blank" in some later tidy-up would quietly turn it into stored
+// XSS with access to the Supabase session in localStorage.
+//
+// So only http(s) ever becomes a clickable link; anything else renders as no
+// link at all. The value is still stored and still shown in the edit form, so
+// nothing is silently destroyed — it just never becomes an anchor. Note this
+// also means a scheme-less value ("www.example.com") stops rendering as a
+// link, which is the right outcome: as a bare href it resolved relative to
+// the site, not to the web.
+function safeWebsiteUrl(value) {
+  const url = String(value ?? "").trim();
+  return /^https?:\/\//i.test(url) ? url : null;
+}
+
 let toastTimer = null;
 function showToast(message, isError = false) {
   if (!el.statusToast) return;
@@ -529,6 +550,7 @@ function renderPropertyList() {
     .map((p) => {
       const visited = isVisited(p);
       const location = [p.location, p.country].filter(Boolean).join(", ");
+      const website = safeWebsiteUrl(p.website);
       return `<article class="property-row${visited ? " is-visited" : ""}" data-property-id="${p.id}">
         <div class="property-main">
           <div class="property-title">
@@ -539,7 +561,7 @@ function renderPropertyList() {
             ${visitedTag(p)}
             ${distanceTag(p)}
             ${institutionTags(p)}
-            ${p.website ? `<a class="property-website" href="${escapeHtml(p.website)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
+            ${website ? `<a class="property-website" href="${escapeHtml(website)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
           </div>
           ${p.notes ? `<p class="property-note">${escapeHtml(p.notes)}</p>` : ""}
         </div>
@@ -1401,6 +1423,7 @@ function renderMapSelection() {
     return;
   }
   const location = [property.location, property.country].filter(Boolean).join(", ");
+  const website = safeWebsiteUrl(property.website);
   // Several markers can sit close enough together that a tap can't cleanly
   // hit just one — the card becomes a small carousel over all of them.
   const clusterNav = ids.length > 1
@@ -1416,7 +1439,7 @@ function renderMapSelection() {
     <div class="property-title"><span class="property-name">${escapeHtml(property.name)}</span></div>
     ${location ? `<div class="property-location">${escapeHtml(location)}</div>` : ""}
     <div class="property-meta">${visitedTag(property)}${distanceTag(property)}${institutionTags(property)}</div>
-    ${property.website ? `<a class="property-website" href="${escapeHtml(property.website)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
+    ${website ? `<a class="property-website" href="${escapeHtml(website)}" target="_blank" rel="noopener noreferrer">Website ↗</a>` : ""}
     <div class="property-actions">
       <button type="button" data-action="visit" data-property-id="${property.id}">${isVisited(property) ? "Mark not visited" : "Mark visited"}</button>
       <button type="button" class="ghost" data-action="edit" data-property-id="${property.id}">Edit</button>

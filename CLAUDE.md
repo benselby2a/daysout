@@ -38,7 +38,20 @@ still running JS from before the feature existed).
   exposed; `PGRST205` ("not found in the schema cache") means it is exposed but
   the table is missing or the cache is stale — `notify pgrst, 'reload schema';`.
 - RLS policies grant access to the `authenticated` role only, so the published
-  anon key alone reads nothing. Requires a real Supabase user.
+  anon key alone reads nothing. Requires a real Supabase user. The `anon` role
+  additionally has **no table privileges** (`20261024090000_revoke_anon_grants.sql`
+  revokes them, and sets default privileges so later tables don't pick them up);
+  schema `usage` is deliberately kept, since PostgREST needs it to resolve the
+  schema and it grants nothing on its own. The point is that RLS is no longer
+  the single control — a stray `disable row level security` no longer hands the
+  published key the dataset.
+- **The policies are `using (true)` with no per-user scoping, on purpose.** One
+  shared household list, not a per-account one. The consequence worth
+  remembering: Supabase auth is *project*-wide and the project is shared with
+  the sibling apps, so a user created for any of them can sign in here and read,
+  edit and delete everything. This was reviewed and kept deliberately (Oct 2026);
+  if it ever needs tightening, scope by `auth.jwt() ->> 'email'` rather than
+  adding a `user_id` column — a policy change needs no migration of the data.
 - `supabase.sql` is the full setup (schema + tables + policies + seed) and is
   the concatenation of the files in `supabase/migrations/`. Regenerate both
   together if the seed changes; the seed is idempotent via
@@ -81,6 +94,21 @@ existing `notes` field at migration time, and `era` is dropped entirely: the
 map colours by institution group, not construction date, so era has no
 display surface in this app and adding one would be a second, parallel
 colouring scheme running alongside the existing group-colour one.
+
+Anything rendered into an `href` goes through `safeWebsiteUrl()` as well as
+`escapeHtml()`, because the two solve different problems. `escapeHtml()` only
+escapes `& < > " '` — a `javascript:alert(1)` value contains none of them and
+survives into the attribute intact, and `<input type="url">` does **not**
+reject it either (it is a valid absolute URL; verified in Chromium). Such a
+link is inert today only because these anchors carry `target="_blank"`, which
+Chromium refuses to follow for `javascript:` URLs — incidental protection that
+would vanish the moment someone dropped `target="_blank"`, turning it into
+stored XSS with access to the Supabase session in `localStorage`. So only
+`^https?://` ever becomes an anchor; anything else renders as no link while
+still being stored and still editable. A scheme-less `www.example.com` stops
+linking too, which is correct — as a bare `href` it resolved against the site,
+not the web. Both render sites (the list row and the map selection card) must
+keep using it.
 
 `data/uk.json` holds the four UK nation outlines, extracted from Natural Earth
 1:10m `admin_0_map_subunits` (public domain), simplified and stripped of tiny
